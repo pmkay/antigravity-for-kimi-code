@@ -1,7 +1,7 @@
 ---
 name: antigravity
 description: Run the Antigravity CLI (Gemini) as a collaborating AI inside Kimi Code, with intelligent model routing across the software development lifecycle. Kimi is the conductor/orchestrator — requirements, architecture, the hard 20%, verification, and review — and routes deterministic, high-volume work (scaffolding, boilerplate, test generation, first-pass review, migrations, web/Vertex AI Search) to Antigravity (Gemini), the cheaper, faster model. Use when the user wants to "use Antigravity / agy", "vibe code / agentic engineering", "accelerate the SDLC", "delegate to Gemini", "scaffold / generate tests / migrate", "first-pass code review", "search web or internal/company data", "deep research / multi-source research report", "second-model cross-check", or "lower token cost on a big job". Kimi always verifies Antigravity's output and re-checks itself if unsatisfied.
-version: 0.29.0
+version: 0.29.1
 ---
 
 # Antigravity for Kimi Code — hybrid SDLC
@@ -116,6 +116,7 @@ on a branch) · `--mode accept-edits|plan`
 `--digest` (append a digest-only output contract — use it for any
 bulk read/analysis; the wrapper also warns on stderr when a reply comes back dump-sized,
 because ingesting digests instead of dumps is the single biggest cost lever) ·
+`--print-budget` (calculate the enclosing task budget without launching agy) ·
 `--print-command` (dry run: show the resolved `agy` call, don't run it) · pipe a long
 prompt with a trailing `-`.
 
@@ -174,13 +175,25 @@ reliable. It prints a `AGY_SIGNAL {...}` line on stderr;
 `agy-job status`/`result` surface it, so you can react (e.g. retry quota with `--continue`,
 fix the model name, or add `--yolo`) instead of scraping prose.
 
-**If Kimi itself is running headless (`kimi -p`, one-shot):** prefer **synchronous**
-delegations for predictability — let `agy-delegate` BLOCK and return before you continue.
-Backgrounding is no longer a dead end the way it was in the Claude era: `kimi -p` runs
-tools without approval and steers background-task completions into new synthetic turns
-until none are pending, so an `agy-job` start/status/result workflow CAN finish inside a
-single headless run. Synchronous is still the simplest contract for a one-shot — use the
-job engine headless only when you have a reason to.
+**Execution lifecycle.** Run `agy-delegate --timeout <duration> --print-budget`
+before launch and set the enclosing tool timeout to at least
+`minimum_harness_timeout_seconds`. Short synchronous calls suit one-shot `kimi -p`
+work when the full budget fits. For long work, explicitly background with that
+budget from the start or use `agy-job`; foreground auto-backgrounding can add a
+shorter cap. A 15m delegation needs at least 1,080s in the enclosing task.
+
+Retain the `AGY_RUN` log directory. When Bash promises a completion notification
+and says not to poll, await it; do not call `TaskOutput` until completion. The
+separate job engine uses `agy-job status`/`result` and does not itself register that
+notification. Report meaningful changes only, without repeated routing deliberation.
+
+On timeout, confirm the worker has stopped, inspect retained diagnostics and the
+diff, and verify existing changes before retrying. Edits may be complete without
+a digest. Resume the specific conversation with `--conversation <id>` when available
+and only the remaining scope; do not blindly redispatch or use an unrelated latest
+conversation. State observed symptoms separately from suspected causes, and include
+a browser check for visual changes. See [delegation lifecycle](../../docs/DELEGATION-LIFECYCLE.md)
+for budgets, retained files, cancellation, and recovery.
 
 ## Shared harness: one AGENTS.md for both AIs
 
@@ -289,10 +302,10 @@ rules:
    already handled (`--dir`) back into Kimi's context, and do **not** paste agy's raw
    bulky output into the thread. Kimi ingests a **digest**, not raw content — this is
    what collapses the per-turn `cache_read` that made the hybrid expensive.
-3. **Make agy return a digest, not a dump.** End every delegation prompt with an explicit
-   trailer instruction, e.g.:
-   `"...End with a fenced block ===DIGEST=== listing: files changed, key decisions, and a 1-paragraph 'context for next step'. Put bulky detail ONLY in files, not in your reply."`
-   Kimi reads the DIGEST; the bulky work stays on cheap Gemini tokens.
+3. **Make agy return a digest, not a dump.** Use `--digest` and request changed files,
+   key decisions, and verification evidence. If a task requires a custom format, use
+   one explicit output contract instead; do not stack competing digest trailers.
+   Kimi reads the digest; the bulky work stays on cheap Gemini tokens.
 4. **Batch, don't chatter.** One large, fully-specified delegation beats many small
    round-trips (each round-trip re-reads context = `cache_read` tax).
 5. **Review the diff, not the whole tree.** `git diff` is compact; reading every file is
@@ -314,8 +327,7 @@ rules:
    that benchmark, **this backfired**, because every warming turn generated frontier
    `output` (5× input), the most expensive class, and net cost went *up*. Do NOT
    manufacture work to stay warm. Backgrounding a long delegation (Bash `run_in_background`
-   — Kimi has it too, and a foreground Bash call that hits its timeout auto-backgrounds
-   instead of being killed) is fine to avoid *blocking*, but it does not make a small task
+   with an explicit enclosing timeout from `--print-budget`) is fine to avoid *blocking*, but it does not make a small task
    cheaper. The only real fix is **scale**: make each delegation big enough that the
    displaced Kimi output dwarfs the one-time re-cache cost. Below the break-even, the
    hybrid loses on cost — three optimization variants were tested on a small task and none

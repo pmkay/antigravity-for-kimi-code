@@ -48,6 +48,21 @@ before suspecting a platform problem.
 
 ---
 
+## Delegation timed out with no digest, or no visible output
+
+Check the `AGY_RUN` directory reported at launch and inspect the workspace diff.
+The wrapper retains raw output even if the enclosing task interrupts it. Empty
+logs alone establish neither progress nor a hang; useful edits may already exist.
+Before retrying, confirm the previous worker has stopped and verify those edits.
+
+Use `agy-delegate --timeout <duration> --print-budget` to calculate the enclosing
+task's required timeout. A 15m delegation requires at least 1,080s, including the
+wrapper guard and processing allowance. Explicitly background with that budget
+rather than relying on the foreground-to-background default cap. See
+[delegation lifecycle](DELEGATION-LIFECYCLE.md) for recovery and retained files.
+
+---
+
 ## Windows: delegation hangs, or exits 12 (TIMEOUT) with a 0-byte log
 
 **Cause (upstream, not the plugin):** on native Windows, headless `agy` needs a real

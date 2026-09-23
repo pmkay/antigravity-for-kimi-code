@@ -5,6 +5,18 @@ Claude Code** at 0.28.0, so everything below the port entry is the Claude-era hi
 Format loosely follows [Keep a Changelog](https://keepachangelog.com/); versions are in
 `kimi.plugin.json` (before the port: `.claude-plugin/plugin.json`).
 
+## 0.29.1
+
+- Add `agy-delegate --print-budget` so callers can size the enclosing task timeout
+  to include agy's deadline, the wrapper guard, and startup/cleanup allowance.
+- Retain private per-run diagnostics and announce their location before agy starts.
+  Preserve raw output on interruption, clean up the child process group on signals,
+  and let job cancellation collect the wrapper's exit status.
+- Replace open-ended delegation narration with a concise launch/wait/collect/verify
+  lifecycle. Inspect existing edits after timeout before resuming a known conversation.
+- Cover interruption, retained partial work, budget calculation, and job cancellation
+  with offline lifecycle regression tests.
+
 ## 0.29.0 — the Kimi Code port
 
 The orchestrator changes: **Claude Code → Kimi Code CLI** (Kimi K3 conducts; `agy` /

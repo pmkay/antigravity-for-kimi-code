@@ -13,6 +13,7 @@ DELEGATE="$ROOT/scripts/agy-delegate.sh"
 MEASURE="$ROOT/scripts/measure-session.py"
 
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
+export AGY_RUNS_DIR="$TMP/delegation-runs"
 # SKIP is separate from PASS on purpose: a check that could not run is not a check that
 # passed. The CHANGELOG-placement gate needs a PR base, so it is skipped on a local run
 # and on push, and counting it green there would hide the fact that nothing judged it.
@@ -1895,6 +1896,13 @@ for bad in 'null' '{"kimi_k3":{"in":0,"out":15}}' '{"kimi_k3":{"in":3,"out":"bad
   check "measure: invalid deck uses labeled fallback ($bad)" 0 "$rc" 'hardcoded fallback' "$out"
   check "measure: invalid deck preserves the K3 estimate ($bad)" 0 "$rc" 'est. USD       $21.3000' "$out"
 done
+
+echo "== delegation lifecycle (real processes, offline fixtures) =="
+if python3 "$HERE/test-delegate-lifecycle.py"; then
+  echo "ok: persistent diagnostics, timeout budgets, interruption and cancellation"; PASS=$((PASS+1));
+else
+  echo "FAIL: delegation lifecycle regressions"; FAIL=$((FAIL+1));
+fi
 
 echo "== agy-job.sh (background jobs) =="
 export ANTIGRAVITY_JOBS="$TMP/jobs"

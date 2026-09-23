@@ -15,7 +15,7 @@ Kimi conducts the judgement; Gemini does the heavy lifting — intelligent model
 
 </div>
 
-**Kimi port: 0.29.0.** See [CHANGELOG.md](CHANGELOG.md) for the release details.
+**Kimi port: 0.29.1.** See [CHANGELOG.md](CHANGELOG.md) for the release details.
 
 > **Port scope:** Kimi Code replaces Claude Code as the conductor; the executor (`agy`) is unchanged. Claude-era differences are called out where they matter, and the measured A/B data below comes from the original project and is labelled as such.
 
@@ -157,7 +157,7 @@ Write tasks also need an agy-side permission grant: a matching `permissions.allo
 | `/antigravity:cloud-run-debug [--service <s>] [--region <r>] [--project <id>] [--since 1h] [--apply]` | diagnose a failing Cloud Run service — agy digests the error logs, Kimi infers the root cause + fix; read-only by default (`--apply` writes to a branch) |
 | `/antigravity:status [id]` · `:result <id>` · `:cancel <id>` | manage background delegation jobs |
 
-> Background jobs are for **interactive** sessions (fire-and-collect). Headless (`kimi -p`), prefer **synchronous** delegation — print mode can steer background-task completions into new turns, but a synchronous `agy-delegate` call keeps a one-shot run predictable.
+> Calculate the enclosing task budget with `agy-delegate --timeout 15m --print-budget` before launching. For long runs, explicitly background with that budget or use `agy-job`; foreground auto-backgrounding can impose a shorter cap. Short synchronous calls suit one-shot `kimi -p` work when the budget fits. Every launch reports an `AGY_RUN` diagnostic directory. After interruption, inspect the logs and verify existing edits before retrying. See [delegation lifecycle](docs/DELEGATION-LIFECYCLE.md).
 
 <a id="configuration"></a>
 
@@ -180,6 +180,7 @@ Use a model name from `agy models` when remapping tiers. `agy-doctor` also print
 |---|---|---|
 | `AGY_DEFAULT_TIER` | `flash` | default delegation tier (`flash` / `flash-lo` / `pro`) |
 | `AGY_TIMEOUT` | `5m` | default delegation timeout |
+| `AGY_RUNS_DIR` | `~/.kimi-code/antigravity-runs` | persistent private run diagnostics (under `KIMI_CODE_HOME` when customized) |
 | `AGY_DEFAULT_MODEL` | tier mapping | exact agy model name, overriding tiers |
 | `AGY_TIER_FLASH` · `AGY_TIER_FLASH_LO` · `AGY_TIER_PRO` | Gemini tier models | per-tier model remaps (any name `agy models` lists) |
 | `AGY_STRUCTURED_OUTPUT` | `on` | parse agy's `--output-format json` envelope (agy ≥ 1.1.8) |

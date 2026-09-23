@@ -86,21 +86,28 @@ Options: `--tier flash|flash-lo|pro` · `--dir <repo-root>` (so agy reads
 (required for any tool use or file writing in headless mode — a grant over the machine,
 not over `--dir`) · `--sandbox` (does NOT contain anything; measured inert under
 `--yolo`) ·
-`--timeout 10m` · `-c`/`--continue` to hold state on the cheap side.
+`--timeout 10m` · `--print-budget` · `--conversation <id>` to resume a known interrupted run.
 
 ## Cost discipline (why this subagent exists)
 
 1. **Check the break-even first.** If the task is small, self-contained, or
    judgement-heavy, do **not** delegate — return a one-line note that it is below
    the break-even and the caller should do it directly.
-2. **Always demand a digest, not a dump** (the biggest cost lever). End every
-   delegation prompt with a trailer like:
-   `"...End with a fenced ===DIGEST=== block listing: files changed, key decisions,
-   and a 1-paragraph 'context for next step'. Put bulky detail ONLY in files, not in your reply."`
-3. **Return only the digest** to the caller. Do not paste agy's raw bulky output
-   or re-read the files agy already handled — that re-inflates Kimi's context
-   and erases the savings.
-4. **Batch.** Prefer one large, fully-specified delegation over many round-trips.
+2. **Demand a digest.** Use `--digest` and request changed files, key decisions,
+   verification evidence, and remaining work. Do not reconstruct file contents.
+3. **Budget and launch once.** Call `agy-delegate --timeout <duration> --print-budget`
+   and set the enclosing tool timeout to at least `minimum_harness_timeout_seconds`.
+   If it exceeds the foreground limit, explicitly background with that budget or
+   use `agy-job`; auto-backgrounding may impose a shorter cap.
+4. **Await and collect.** Retain the `AGY_RUN` directory/job ID. Follow a native Bash
+   instruction to await automatic notification without polling. `agy-job` uses its
+   own status/result commands and does not register such a notification itself.
+   Return concise status and evidence; do not repeat the specification or reasoning.
+5. **Recover without duplicate writers.** If interrupted, return the run directory,
+   known worker state, and remaining uncertainty to the caller. Missing output does
+   not mean no edits. The caller must confirm the worker stopped and inspect/verify
+   the diff before any retry. Resume only an identified conversation with remaining
+   work; never automatically re-dispatch the original task.
 
 ## Modes
 
@@ -121,7 +128,9 @@ not over `--dir`) · `--sandbox` (does NOT contain anything; measured inert unde
 
 ## What to return to the caller
 
-1. agy's `===DIGEST===` (files changed, key decisions, context-for-next-step).
+1. agy's digest (files changed, key decisions, context-for-next-step), or the
+   failure status and retained run directory if no digest was returned. Never
+   invent a digest or infer successful edits from process status.
 2. A short **"VERIFY THIS"** line stating exactly what the caller must run/check
    (e.g. "run `pytest -q`", "review the diff on branch X", "corroborate the cited
    URLs"). Never assert the work is correct or done — agy's self-reported pass is a
@@ -135,7 +144,8 @@ The wrapper exits non-zero and prints an `AGY_SIGNAL {...}` line on failure:
 
 - `10` quota / rate limit → report it; suggest the caller retry later with `--continue`.
 - `11` auth required → tell the caller to run `agy` once interactively to sign in.
-- `12` timeout → suggest a larger `--timeout` or a narrower task.
+- `12` timeout, or `129`/`130`/`143` interruption → return retained diagnostics;
+  caller checks worker exit and existing edits before deciding whether to resume.
 - `13` agy missing → report the install step (https://antigravity.google/docs/cli-using).
 - `14` model unavailable → the tier/`--model` name is not in `agy models`; tell the
   caller to remap the tier (`AGY_TIER_*` in `~/.kimi-code/antigravity.conf`) to a
