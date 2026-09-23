@@ -1,5 +1,14 @@
 #!/usr/bin/env bash
-# bin/ entrypoint on the Bash-tool PATH (Claude Code adds a plugin's bin/ to PATH).
-# $CLAUDE_PLUGIN_ROOT is NOT exported to model-run Bash (issue #11), so commands and
+# bin/ entrypoint on the shell PATH: the plugin's session-start hook links these
+# shims into ${KIMI_CODE_HOME:-~/.kimi-code}/bin (where `kimi` itself usually lives).
+# The plugin root is NOT exported to model-run Bash (issue #11), so commands and
 # skills invoke this bare name; it forwards to the implementation in ../scripts/measure-session.py.
-exec "$(cd "$(dirname "$0")/.." && pwd)/scripts/measure-session.py" "$@"
+SRC="$0"
+while [ -L "$SRC" ]; do
+  L="$(readlink "$SRC")"
+  case "$L" in
+    /*) SRC="$L" ;;
+    *) SRC="$(cd "$(dirname "$SRC")" && pwd)/$L" ;;
+  esac
+done
+exec "$(cd "$(dirname "$SRC")/.." && pwd)/scripts/measure-session.py" "$@"

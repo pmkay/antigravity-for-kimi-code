@@ -13,10 +13,12 @@ Do this:
    uncommitted + last commit if unspecified).
 2. Delegate the review to agy (pro tier) — pipe the diff in on stdin:
    `git diff | agy-delegate --tier pro -`
-   (This runs as YOU, the conductor. The `antigravity-delegate` subagent cannot pipe —
-   its PreToolUse gate refuses every pipeline since GHSA-hwv2-vjgj-8rcv, because `git`
-   with arbitrary arguments executes arbitrary commands and `cat` feeding the wrapper
-   ships any file to the external model. If you delegate this step, pass `--dir`.)
+   (This pipe form is a **main-agent pattern** — it runs as YOU, the conductor. Do not
+   ask the `antigravity-delegate` subagent to do it: its contract restricts it to bare
+   `agy-delegate`/`agy-job` invocations with no pipelines (the Claude-era gate that
+   enforced this, GHSA-hwv2-vjgj-8rcv, is gone on Kimi, but the restriction stands —
+   `git` with arbitrary arguments executes arbitrary commands and `cat` feeding the
+   wrapper ships any file to the external model). If you delegate this step, pass `--dir`.)
    with an instruction to find correctness/security/performance bugs, be skeptical, and
    list each as `file:line — issue`. If `--adversarial` is set, also have it challenge the
    design decisions and tradeoffs, not just line bugs.

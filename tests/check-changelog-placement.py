@@ -10,12 +10,12 @@ and both cost a later `release:` commit that did nothing but move paragraphs.
 No rule over one file can catch this. "Is this entry under a released heading?" needs to
 know which lines are NEW, and CHANGELOG.md alone cannot say — the released sections and
 the unreleased one are the same shape. So the check takes the base's copy of the file and
-the base's plugin.json, and judges only the lines this PR adds.
+the base's kimi.plugin.json, and judges only the lines this PR adds.
 
 Rule. An added line may sit under:
   (a) a `## x.y.z` heading whose version is absent from the base — a section this PR
       opened, which by definition has not shipped; or
-  (b) the topmost heading, when its version is newer than the base's plugin.json — the
+  (b) the topmost heading, when its version is newer than the base's kimi.plugin.json — the
       section the next release will carry. This is the case a `release:` PR needs: #84
       moved entries into `## 0.27.2` while the base was still on 0.27.1.
 Anything else is a line being added to history. Blank lines are ignored, and so is
@@ -116,7 +116,7 @@ def check(base_text, head_text, base_version):
             if ver > base_version:
                 continue
             reason = ("it is the newest section, but %s is not ahead of the base's "
-                      "plugin.json (%s) — that version has shipped"
+                      "kimi.plugin.json (%s) — that version has shipped"
                       % (dotted(ver), dotted(base_version)))
         else:
             reason = "that section exists on the base branch and is not the newest one"
@@ -161,7 +161,7 @@ def main(argv):
           "newest one.")
     print("If that heading is already on the base because you branched off another PR, "
           "rebasing is not enough once it has merged — open the next version's heading "
-          "and bump .claude-plugin/plugin.json and skills/antigravity/SKILL.md to match.")
+          "and bump kimi.plugin.json and skills/antigravity/SKILL.md to match.")
     print("If you are deliberately correcting a section that has already shipped, nothing "
           "makes this pass, not even a release: PR. It is not a required check: merge over "
           "it and say in the PR body that the history edit is intended.")

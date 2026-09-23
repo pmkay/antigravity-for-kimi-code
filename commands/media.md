@@ -3,7 +3,7 @@ description: Understand an audio / video / image file — Antigravity (agy/Gemin
 argument-hint: "<file> [what to focus on] [--convert] [--tier pro|flash] [--timeout 20m]"
 ---
 
-Claude Code can't hear audio or watch video, and doing it locally means an ffmpeg +
+Kimi can't hear audio or watch video, and doing it locally means an ffmpeg +
 speech-model stack. Gemini is natively multimodal — so **delegate the perception** to agy
 and keep the judgment here.
 

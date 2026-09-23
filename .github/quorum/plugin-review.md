@@ -1,19 +1,20 @@
 ---
 name: plugin-review
-description: Review criteria for the Antigravity for Claude Code plugin — a bash + markdown Claude Code plugin that delegates work to Google's Antigravity CLI (`agy`).
+description: Review criteria for the Antigravity for Kimi Code plugin — a bash + markdown Kimi Code plugin that delegates work to Google's Antigravity CLI (`agy`).
 ---
 
 # What this repository is
 
-A Claude Code plugin, written in **bash and markdown**, that hands well-scoped work to a
+A Kimi Code plugin, written in **bash and markdown**, that hands well-scoped work to a
 second AI (Google's Antigravity CLI, `agy`, running Gemini) and verifies the result. There
-is almost no application code: the artefacts are shell wrappers, hooks, a skill document,
-and slash-command definitions. Review it accordingly — the risks live in shell semantics,
-in a security gate, in a set of machine-readable contracts, and in documentation that makes
-claims about a fast-moving upstream CLI.
+is almost no application code: the artefacts are shell wrappers, hooks, a system-prompt
+policy (`SYSTEM.md`), a skill document, and slash-command definitions. Review it
+accordingly — the risks live in shell semantics, in what is injected into the model's
+context, in a set of machine-readable contracts, and in documentation that makes claims
+about a fast-moving upstream CLI.
 
-CI already runs the test suite, `shellcheck --severity=error`, and `claude plugin validate`.
-Do not repeat those. Everything below is what CI cannot check.
+CI already runs the test suite, `shellcheck --severity=error`, and JSON manifest
+validation. Do not repeat those. Everything below is what CI cannot check.
 
 # Contracts that must not drift
 
@@ -37,21 +38,25 @@ orchestrators parse them. `AGY_USAGE`'s semantics are specific and easy to get b
 counter — not part of `total`, not a subset of `input`**. Anything that prices the Gemini
 side using a different arrangement is wrong.
 
-**Version sync** — `.claude-plugin/plugin.json` and `skills/antigravity/SKILL.md` both carry
+**Version sync** — `kimi.plugin.json` and `skills/antigravity/SKILL.md` both carry
 a version. They must match.
 
-# The security gate
+# The delegate subagent's confinement
 
-`hooks/validate-delegate-bash.sh` is the **only** restriction on what the delegate subagent
-is allowed to run. Any change to it deserves disproportionate scrutiny, in both directions:
+The Claude Code original had a hard gate: a per-subagent `PreToolUse` hook
+(`hooks/validate-delegate-bash.sh`) that was the only restriction on what the delegate
+subagent could run. **Kimi Code has no per-agent hooks, so that gate is gone by platform,
+not by choice** — do not ask for it back in a review; flag instead any change that weakens
+what replaced it:
 
-- a **bypass** — a shell construct that reaches a command the gate believes it blocked
-  (quoting, substitution, chained operators, pipelines it did not anticipate)
-- a **false positive** — a legitimate delegation prompt the gate now refuses, which pushes
-  users toward disabling it
-
-It is designed to **fail closed**. A change that makes it fail open on a parse error or a
-missing dependency is a serious regression even if it looks like robustness.
+- the subagent's `tools: Bash, Read, Glob` allowlist in `agents/antigravity-delegate.md`
+  (no `Write`/`Edit` — file writes must keep happening only inside agy), and its prompt
+  contract restricting Bash to the `agy-delegate` / `agy-job` wrappers;
+- `hooks/nudge-delegation.sh`, whose stdout is appended to the model's context on every
+  prompt: the nudge text must stay a **fixed string** — interpolating the user's prompt or
+  repo content into hook output opens a prompt-injection channel;
+- `hooks/session-start.sh`, which symlinks the plugin's `bin/*` into `~/.kimi-code/bin` —
+  it must not link anything else, anywhere else.
 
 # Shell correctness
 
@@ -97,7 +102,8 @@ claims. Two failure modes:
   claim, not for the file.
 
 Statements about `agy` behaviour should say what was verified and on which version. Flag
-confident claims that were not measured.
+confident claims that were not measured. A/B cost numbers measured with Claude as conductor
+are historical (Claude-era); presenting them as measured on Kimi is a bug.
 
 # Cost discipline
 

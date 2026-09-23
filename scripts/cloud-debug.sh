@@ -2,16 +2,16 @@
 #
 # cloud-debug.sh — fetch a GCP resource's recent ERROR logs and hand them to
 # Antigravity (`agy` / Gemini) for a compact, structured digest.
-# Part of the "Antigravity for Claude Code" plugin.
+# Part of the "Antigravity for Kimi Code" plugin.
 #
 # This is the Executor half of the /antigravity:cloud-run-debug command:
-# Claude (the Conductor) reasons about root cause + the fix; the bulk, cheap
+# Kimi (the Conductor) reasons about root cause + the fix; the bulk, cheap
 # work — pulling potentially hundreds of log lines and clustering them into a
-# digest — is offloaded here to agy so Claude's context stays lean.
+# digest — is offloaded here to agy so Kimi's context stays lean.
 #
 # It is deliberately READ-ONLY: it reads logs and produces a digest. It never
 # applies fixes and never writes to your project (the `--apply` flow lives in
-# the command, driven by Claude on a branch). The default resource type is
+# the command, driven by Kimi on a branch). The default resource type is
 # Cloud Run (cloud_run_revision); `--resource-type` is parameterized so the
 # same engine can back a future gke-debug / functions-debug without a rewrite.
 #
@@ -243,7 +243,7 @@ if [ "$(LC_ALL=C; printf '%s' "${#LOGS}")" -gt "$MAX_BYTES" ]; then
 NOTE: the JSON array below was clipped to ${MAX_BYTES} bytes and is no longer valid JSON — parse it leniently; the digest may be partial."
 fi
 
-# --- delegate the digest to agy (cheap tier; lean output back to Claude) ---
+# --- delegate the digest to agy (cheap tier; lean output back to Kimi) ---
 set +e
 DIGEST="$(printf '%s\n%s\n' "$INSTRUCTION" "$LOGS" | "$DELEGATE" --tier "$TIER" - 2>"$ERR")"
 RC=$?

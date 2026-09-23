@@ -2,16 +2,16 @@
 #
 # agy-media.sh — hand an audio / video / image file to Antigravity (`agy` / Gemini)
 # and get back a TIMESTAMPED DIGEST, with the full transcript written to a file.
-# Part of the "Antigravity for Claude Code" plugin.
+# Part of the "Antigravity for Kimi Code" plugin.
 #
-# Why this exists: Claude Code can't hear audio or watch video, and adding that
+# Why this exists: Kimi Code can't hear audio or watch video, and adding that
 # locally means ffmpeg + a speech model. Gemini is natively multimodal, so this
 # delegates the perception work to agy — no local transcription stack needed.
 #
 # Cost discipline (the point): a 1-hour meeting is ~10k words. Pasting that into
 # the conductor's context is exactly the `cache_read` blow-up the plugin exists to
 # avoid. So agy writes the FULL transcript to a file and returns only a compact,
-# timestamped digest; Claude ingests the digest and reads slices of the transcript
+# timestamped digest; Kimi ingests the digest and reads slices of the transcript
 # only when it needs to verify something.
 #
 # Format pre-flight: agy's file→media handling is narrower than the Gemini API.
@@ -132,7 +132,7 @@ if [ -n "$BYTES" ] && [ "$BYTES" -gt 26214400 ]; then
 fi
 
 # --- build the delegation prompt --------------------------------------------
-# Contract: full transcript -> FILE; only a timestamped digest -> stdout (Claude).
+# Contract: full transcript -> FILE; only a timestamped digest -> stdout (Kimi).
 IS_VISUAL=0
 case "$EXT" in mp4|mov|webm|png|jpg|jpeg|gif|webp) IS_VISUAL=1 ;; esac
 VISUAL_LINE=""

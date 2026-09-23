@@ -40,25 +40,23 @@
     "out": 7.5,
     "cached_in": 0.15
   },
-  "_comment": "Per-1M-token USD on Vertex AI, ~2026-07. VERIFY against current Google Cloud / Anthropic pricing before quoting. Global endpoints; regional/multi-region carry a ~10% premium.",
+  "_comment": "Per-1M-token USD: Gemini on Vertex AI ~2026-07 (global endpoints; regional/multi-region carry a ~10% premium), Kimi k3 from the official platform rates 2026-09. VERIFY against current Google Cloud / platform.kimi.ai pricing before quoting.",
   "_sources": [
     "cloud.google.com/vertex-ai/generative-ai/pricing",
-    "platform.claude.com/docs/en/about-claude/pricing"
+    "platform.kimi.ai (official API pricing, September 2026)"
   ],
-  "_cache_note": "cache_write_mult / cache_read_mult apply to the CLAUDE deck only. Gemini prices cached input at a flat rate (cached_in) and bills context-cache STORAGE by time, which agy does not report — so any Gemini-side figure you compute here is a LOWER BOUND.",
-  "claude_opus": {
-    "in": 5.0,
-    "out": 25.0
-  },
-  "claude_sonnet": {
+  "_cache_note": "cache_write_mult / cache_read_mult apply to the orchestrator deck (default kimi_k3): cache_write_mult 1.0 reproduces the published $3.00/M cache-write rate (equal to input; verified at https://platform.kimi.ai/ on 2026-09-23), and cache_read_mult 0.1 reproduces kimi_k3's published cached_in exactly (3.00 x 0.1 = 0.30). Gemini prices cached input at a flat rate (cached_in) and bills context-cache STORAGE by time, which agy does not report — so any Gemini-side figure you compute here is a LOWER BOUND.",
+  "_kimi_k3_note": "kimi_k3 is the ORCHESTRATOR deck (the model Kimi Code runs). Rates are the official platform.kimi.ai per-token prices, September 2026: $3.00/M input, $15.00/M output, $3.00/M cache writes, $0.30/M cached input. IMPORTANT: Kimi Code SUBSCRIPTIONS are quota-based (a plan, not per-token billing), so these rates apply only when running through the paid platform API — for a subscription the deck is a model-agnostic $-proxy for comparing token volumes, not a bill. Replaces the Claude decks of the original Claude Code plugin (claude_opus 5/25, claude_sonnet 3/15, removed in the Kimi fork).",
+  "kimi_k3": {
     "in": 3.0,
-    "out": 15.0
+    "out": 15.0,
+    "cached_in": 0.30
   },
   "gemini_pro": {
     "in": 2.0,
     "out": 12.0
   },
-  "cache_write_mult": 1.25,
+  "cache_write_mult": 1.0,
   "cache_read_mult": 0.1,
-  "orchestrator": "claude_opus"
+  "orchestrator": "kimi_k3"
 }

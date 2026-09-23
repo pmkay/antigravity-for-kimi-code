@@ -5,9 +5,8 @@ body:
   - type: markdown
     attributes:
       value: |
-        Thanks for the report! Every environment bug fixed so far (#6, #10, #11, #15) was
-        solved by exactly the info below. Please check
-        [docs/TROUBLESHOOTING.md](https://github.com/yuting0624/antigravity-for-claude-code/blob/master/docs/TROUBLESHOOTING.md)
+        Thanks for the report! Environment bugs are solved by exactly the info below. Please check
+        [docs/TROUBLESHOOTING.md](https://github.com/pmkay/antigravity-for-kimi-code/blob/master/docs/TROUBLESHOOTING.md)
         first — your issue may already have a fix or a documented workaround.
   - type: textarea
     id: what
@@ -24,7 +23,7 @@ body:
     id: doctor
     attributes:
       label: Output of `agy-doctor` (or `/antigravity:setup`)
-      description: Paste the full output — it includes the plugin version, agy version/auth state, and platform checks. If `agy-doctor` isn't found, say so (that itself is diagnostic — likely a pre-0.14.0 install).
+      description: Paste the full output — it includes the plugin version, agy version/auth state, and platform checks. If `agy-doctor` isn't found, say so (that itself is diagnostic — usually a session started before install; see TROUBLESHOOTING).
       render: text
     validations:
       required: true
@@ -39,10 +38,10 @@ body:
     id: install
     attributes:
       label: How is the plugin installed?
-      description: Marketplace and local-dev installs resolve paths differently (see #11) — this matters.
+      description: Installs are copied to the managed plugins dir, so a stale copy and a fresh checkout can differ (re-install after edits) — this matters.
       options:
-        - Marketplace (/plugin install antigravity@antigravity-for-claude-code)
-        - Local dev (claude --plugin-dir ...)
+        - From GitHub (/plugins install https://github.com/pmkay/antigravity-for-kimi-code)
+        - From a local path (/plugins install <path>)
         - Not sure
     validations:
       required: true

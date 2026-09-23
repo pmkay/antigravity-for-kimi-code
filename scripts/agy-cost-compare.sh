@@ -1,24 +1,29 @@
 #!/usr/bin/env bash
 #
 # agy-cost-compare.sh — run ONE task on agy (Gemini), then show what that same
-# token volume would cost on Claude vs on Gemini Flash. A demo aid for the
-# "let the cheap model do the bulk tokens" hypothesis.
+# token volume would cost on Kimi k3 (the orchestrator) vs on Gemini Flash. A
+# demo aid for the "let the cheap model do the bulk tokens" hypothesis.
 #
 # HONEST SCOPE / CAVEATS:
 #   * agy v1.0.x has no token usage API in --print mode, so token counts here are
 #     ESTIMATED from character count (chars / CHARS_PER_TOKEN). They are ballpark,
 #     not billing-accurate.
 #   * This prices the SAME measured volume at both price decks to visualize the
-#     per-token price gap. The REAL saving in practice is larger, because Claude
-#     as an orchestrator processes far fewer tokens than Claude doing everything.
-#   * Prices below are PLACEHOLDERS. Override with the real Vertex rates for your
-#     project before quoting numbers to anyone. Per 1M tokens, in USD.
+#     per-token price gap. The REAL saving in practice is larger, because Kimi
+#     as an orchestrator processes far fewer tokens than Kimi doing everything.
+#   * The Gemini side is PLACEHOLDER rates — override with the real Vertex rates
+#     for your project before quoting numbers to anyone. Per 1M tokens, in USD.
+#   * The Kimi side is the platform.kimi.ai per-token deck (kimi_k3). Kimi Code
+#     SUBSCRIPTIONS are quota-based, so that side is a $-proxy for the token
+#     volume, not a bill, unless you run on the paid platform API.
 #
 # Usage:
 #   agy-cost-compare.sh [-t flash|flash-lo|pro] "the task prompt"
 #
 # Env overrides (USD per 1M tokens):
-#   CLAUDE_IN_PER_M  CLAUDE_OUT_PER_M     (default: 5 / 25   -- VERIFY!)
+#   KIMI_IN_PER_M    KIMI_OUT_PER_M       (default: prices.json kimi_k3,
+#                                          today 3 / 15 -- VERIFY; quota-based
+#                                          subscriptions pay no per-token rate)
 #   GEMINI_IN_PER_M  GEMINI_OUT_PER_M     (default: prices.json gemini_flash,
 #                                          today 0.75 / 3.75 -- VERIFY against
 #                                          your own Vertex rates)
@@ -49,8 +54,8 @@ if [ -f "$PRICES" ] && command -v python3 >/dev/null 2>&1; then
 import json,sys
 try:
     d=json.load(open(sys.argv[1])); t=sys.argv[2]
-    g=d["gemini_pro"] if t=="pro" else d["gemini_flash"]; c=d["claude_opus"]
-    print(f'_CIN={c["in"]} _COUT={c["out"]} _GIN={g["in"]} _GOUT={g["out"]}')
+    g=d["gemini_pro"] if t=="pro" else d["gemini_flash"]; c=d["kimi_k3"]
+    print(f'_KIN={c["in"]} _KOUT={c["out"]} _GIN={g["in"]} _GOUT={g["out"]}')
 except Exception: pass
 PY
 )"
@@ -58,8 +63,8 @@ fi
 # Last-resort fallbacks, used only when prices.json or python3 is unavailable. Keep them
 # in step with prices.json — a stale hardcoded rate here quotes a wrong number in exactly
 # the situation where nobody can see where it came from.
-CLAUDE_IN_PER_M="${CLAUDE_IN_PER_M:-${_CIN:-5}}"
-CLAUDE_OUT_PER_M="${CLAUDE_OUT_PER_M:-${_COUT:-25}}"
+KIMI_IN_PER_M="${KIMI_IN_PER_M:-${_KIN:-3}}"
+KIMI_OUT_PER_M="${KIMI_OUT_PER_M:-${_KOUT:-15}}"
 GEMINI_IN_PER_M="${GEMINI_IN_PER_M:-${_GIN:-0.75}}"
 GEMINI_OUT_PER_M="${GEMINI_OUT_PER_M:-${_GOUT:-3.75}}"
 CPT="${CHARS_PER_TOKEN:-4}"
@@ -76,25 +81,25 @@ IN_CHARS=${#PROMPT}
 OUT_CHARS=${#OUT}
 
 awk -v ic="$IN_CHARS" -v oc="$OUT_CHARS" -v cpt="$CPT" \
-    -v cin="$CLAUDE_IN_PER_M" -v cout="$CLAUDE_OUT_PER_M" \
+    -v kin="$KIMI_IN_PER_M" -v kout="$KIMI_OUT_PER_M" \
     -v gin="$GEMINI_IN_PER_M" -v gout="$GEMINI_OUT_PER_M" \
     -v el="$ELAPSED" 'BEGIN {
   it = ic / cpt; ot = oc / cpt;
-  cc = it*cin/1e6 + ot*cout/1e6;
+  kc = it*kin/1e6 + ot*kout/1e6;
   gc = it*gin/1e6 + ot*gout/1e6;
-  save = cc - gc;
-  ratio = (gc > 0) ? cc / gc : 0;
+  save = kc - gc;
+  ratio = (gc > 0) ? kc / gc : 0;
   printf "\n--- estimated (chars/%d), NOT billing-accurate ---\n", cpt;
   printf "input  ~%d tokens (%d chars)\n", it, ic;
   printf "output ~%d tokens (%d chars)\n", ot, oc;
   printf "elapsed: %ds\n\n", el;
   printf "%-14s %12s %12s\n", "deck", "in $/1M", "out $/1M";
-  printf "%-14s %12.2f %12.2f\n", "Claude", cin, cout;
+  printf "%-14s %12.2f %12.2f\n", "Kimi k3", kin, kout;
   printf "%-14s %12.2f %12.2f\n\n", "Gemini Flash", gin, gout;
-  printf "if priced as Claude: $%.6f\n", cc;
-  printf "actual on Gemini   : $%.6f\n", gc;
-  printf "saved on this task : $%.6f  (%.1fx cheaper)\n", save, ratio;
-  printf "NOTE: real saving is larger — orchestrator Claude handles far fewer tokens.\n";
+  printf "if priced as Kimi k3: $%.6f\n", kc;
+  printf "actual on Gemini    : $%.6f\n", gc;
+  printf "saved on this task  : $%.6f  (%.1fx cheaper)\n", save, ratio;
+  printf "NOTE: real saving is larger — orchestrator Kimi handles far fewer tokens.\n";
 }'
 
 echo ""

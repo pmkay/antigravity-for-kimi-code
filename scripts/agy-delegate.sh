@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 #
 # agy-delegate.sh — robust headless wrapper around the Antigravity CLI (`agy`).
-# Part of the "Antigravity for Claude Code" plugin.
+# Part of the "Antigravity for Kimi Code" plugin.
 #
-# Purpose: let Claude Code (the orchestrator) hand a single, well-scoped subtask
+# Purpose: let Kimi Code (the orchestrator) hand a single, well-scoped subtask
 # to an Antigravity (Gemini) agent via `agy --print`, and get clean text back on
 # stdout — for delegation, cross-model checks, or offloading bulk work.
 #
@@ -59,20 +59,38 @@
 # AGY_USAGE_LOG=/path/to/log: stderr is easily lost (`2>&1 | tail -N` keeps the
 # digest and drops the usage line — see tee_usage below), a named file is not.
 # Since 0.28.0 the AGY_USAGE line also names the model that ran and the tier it was
-# picked from ("tier" is empty when --model or default_model chose the model), plus
+# picked from ("tier" is empty when --model or AGY_DEFAULT_MODEL chose the model), plus
 # agy's own duration_seconds and num_turns (1.2.x envelope; 0 on older agy) — so a
 # log can be priced per tier without joining it back to the command that produced it.
 #
 # agy is multi-model: tiers map to Gemini by default, but you can point delegation at any
-# model `agy models` lists (e.g. Claude/GPT on plans that expose them). Defaults via plugin
-# userConfig (env): CLAUDE_PLUGIN_OPTION_DEFAULT_TIER, _TIMEOUT, _DEFAULT_MODEL (exact name),
-# _USAGE_LOG, and per-tier remaps _TIER_FLASH / _TIER_FLASH_LO / _TIER_PRO.
-# Explicit --model/--tier win; AGY_USAGE_LOG wins over _USAGE_LOG.
+# model `agy models` lists (e.g. Claude/GPT on plans that expose them). Defaults come from
+# antigravity.conf via lib-config.sh (same-named env vars win): AGY_DEFAULT_TIER,
+# AGY_TIMEOUT, AGY_DEFAULT_MODEL (exact name), AGY_USAGE_LOG, and per-tier remaps
+# AGY_TIER_FLASH / AGY_TIER_FLASH_LO / AGY_TIER_PRO. Explicit --model/--tier win over both.
 #
 set -euo pipefail
 
-TIER="${CLAUDE_PLUGIN_OPTION_DEFAULT_TIER:-flash}"
-TIMEOUT="${CLAUDE_PLUGIN_OPTION_TIMEOUT:-5m}"
+# Configuration. Claude Code exported plugin userConfig as CLAUDE_PLUGIN_OPTION_*; Kimi
+# Code has no settings bridge, so options live in a plain KEY=VALUE file —
+#   ${AGY_CONFIG:-${KIMI_CODE_HOME:-$HOME/.kimi-code}/antigravity.conf}
+# — loaded by lib-config.sh with env-vars-win semantics, BEFORE the defaults below are
+# read. Fail soft: a missing loader just means the built-in defaults. Resolve symlinks
+# first so this also works invoked through a symlink (e.g. linked into ~/.kimi-code/bin
+# by the session-start hook); the bin/ shims exec the real script path, so BASH_SOURCE
+# is already the real path on that route.
+_SRC="${BASH_SOURCE[0]}"
+while [ -L "$_SRC" ]; do
+  _dir="$(cd "$(dirname "$_SRC")" && pwd)"
+  _SRC="$(readlink "$_SRC")"
+  case "$_SRC" in /*) ;; *) _SRC="$_dir/$_SRC" ;; esac
+done
+_LIB="$(cd "$(dirname "$_SRC")" && pwd)/lib-config.sh"
+if [ -f "$_LIB" ]; then . "$_LIB"; fi
+unset _SRC _dir _LIB
+
+TIER="${AGY_DEFAULT_TIER:-flash}"
+TIMEOUT="${AGY_TIMEOUT:-5m}"
 TIER_EXPLICIT=0
 MODEL=""
 YOLO=0
@@ -101,9 +119,9 @@ need() { [ "$1" -ge 2 ] || die "option '$2' needs a value"; }
 # Gemini-side cost data exactly this way, which made the hybrid look cheaper than
 # it was. A file the caller names cannot be truncated by a pipe.
 #
-# Set AGY_USAGE_LOG=/path/to/log (or the plugin option `usage_log`). Appended to,
-# never truncated; failure to write is non-fatal (measurement must not break work).
-USAGE_LOG="${AGY_USAGE_LOG:-${CLAUDE_PLUGIN_OPTION_USAGE_LOG:-}}"
+# Set AGY_USAGE_LOG=/path/to/log (env, or the same key in antigravity.conf — env wins).
+# Appended to, never truncated; failure to write is non-fatal (measurement must not break work).
+USAGE_LOG="${AGY_USAGE_LOG:-}"
 tee_usage() { # $1 = the full line, already formatted
   [ -n "$USAGE_LOG" ] || return 0
   # `2>/dev/null` FIRST: redirections apply left to right, so with `>>"$f" 2>/dev/null`
@@ -178,13 +196,13 @@ permission_denied() {   # $1 = "shown" when the caller already echoed $ERR
 usage() { sed -n '/^# Usage:/,/^# Exit codes:/p' "$0" | sed 's/^# \{0,1\}//'; exit 0; }
 
 # --- map a tier to an exact agy model name (see `agy models`) ---
-# Defaults are Gemini, but each tier is remappable to any agy model via userConfig
-# (env), so non-Vertex/non-Gemini plans (Claude/GPT) work without code changes.
+# Defaults are Gemini, but each tier is remappable to any agy model via antigravity.conf
+# (AGY_TIER_*; env wins), so non-Vertex/non-Gemini plans (Claude/GPT) work without code changes.
 model_for_tier() {
   case "$1" in
-    flash)    echo "${CLAUDE_PLUGIN_OPTION_TIER_FLASH:-Gemini 3.8 Flash (High)}" ;;
-    flash-lo) echo "${CLAUDE_PLUGIN_OPTION_TIER_FLASH_LO:-Gemini 3.8 Flash (Low)}" ;;
-    pro)      echo "${CLAUDE_PLUGIN_OPTION_TIER_PRO:-Gemini 3.1 Pro (High)}" ;;
+    flash)    echo "${AGY_TIER_FLASH:-Gemini 3.8 Flash (High)}" ;;
+    flash-lo) echo "${AGY_TIER_FLASH_LO:-Gemini 3.8 Flash (Low)}" ;;
+    pro)      echo "${AGY_TIER_PRO:-Gemini 3.1 Pro (High)}" ;;
     *) die "unknown tier '$1' (use flash | flash-lo | pro)" ;;
   esac
 }
@@ -265,20 +283,20 @@ if [ "$PRINT_CMD" -ne 1 ] && ! command -v agy >/dev/null 2>&1; then
 fi
 
 # Resolve the executor model. Precedence:
-#   --model > explicit --tier > userConfig default_model > default tier (mapped).
+#   --model > explicit --tier > AGY_DEFAULT_MODEL (config/env) > default tier (mapped).
 # agy is multi-model; tiers default to Gemini but are remappable (see model_for_tier).
 USAGE_TIER=""   # the tier the model was derived from; empty when --model/default_model chose it
 if [ -z "$MODEL" ]; then
   if [ "$TIER_EXPLICIT" -eq 1 ]; then
     MODEL="$(model_for_tier "$TIER")"
     USAGE_TIER="$TIER"
-  elif [ -n "${CLAUDE_PLUGIN_OPTION_DEFAULT_MODEL:-}" ]; then
-    MODEL="$CLAUDE_PLUGIN_OPTION_DEFAULT_MODEL"
+  elif [ -n "${AGY_DEFAULT_MODEL:-}" ]; then
+    MODEL="$AGY_DEFAULT_MODEL"
   else
-    # default tier from userConfig; a bad value shouldn't make every call die.
+    # default tier from config/env; a bad value shouldn't make every call die.
     case "$TIER" in
       flash|flash-lo|pro) ;;
-      *) echo "agy-delegate: invalid default tier '$TIER' (set CLAUDE_PLUGIN_OPTION_DEFAULT_TIER to flash|flash-lo|pro); using flash" >&2; TIER="flash" ;;
+      *) echo "agy-delegate: invalid default tier '$TIER' (set AGY_DEFAULT_TIER to flash|flash-lo|pro); using flash" >&2; TIER="flash" ;;
     esac
     MODEL="$(model_for_tier "$TIER")"
     USAGE_TIER="$TIER"
@@ -357,7 +375,7 @@ for d in "${ADD_DIRS[@]:-}"; do [ -n "$d" ] && ARGS+=(--add-dir "$d"); done
 # Gated three ways, falling back to plain text if any is unmet:
 #   * agy actually advertises --output-format (older versions don't),
 #   * python3 is available to parse (the bash-only path stays dependency-free),
-#   * the user hasn't opted out (structured_output=off).
+#   * the user hasn't opted out (AGY_STRUCTURED_OUTPUT=off).
 # NOTE: agy 1.1.8 emits a RAW newline inside the "response" string, which strict
 # JSON parsers reject — so we parse with strict=False. (Reported upstream.)
 # Resolved BEFORE the capability probe below, not just before the main call: the
@@ -375,7 +393,7 @@ HELPF=""; ERR=""; OUTF=""
 trap 'rm -f "$HELPF" "$ERR" "$OUTF" 2>/dev/null' EXIT
 
 JSON_MODE=0
-raw_so="${CLAUDE_PLUGIN_OPTION_STRUCTURED_OUTPUT:-on}"
+raw_so="${AGY_STRUCTURED_OUTPUT:-on}"
 case "$(printf '%s' "$raw_so" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')" in
   off|false|0|no|disabled) ;;
   *)
@@ -602,10 +620,10 @@ $blob"
       shopt -u nocasematch; signal TIMEOUT "agy print-timeout / deadline exceeded"; exit 12 ;;
     *"invalid --model"*|*"is not recognized as a known model"*|*"not a known model"*)
       # agy >= 1.1.2 hard-fails (instead of silently downgrading) when --model can't be
-      # resolved — common when a tier_* / default_model remap points at a model this plan
-      # doesn't expose. Surface it as its own actionable category.
+      # resolved — common when an AGY_TIER_* / AGY_DEFAULT_MODEL remap points at a model
+      # this plan doesn't expose. Surface it as its own actionable category.
       shopt -u nocasematch
-      echo "agy-delegate: model '$MODEL' is not available on this plan — run \`agy models\`, then fix --model / the tier_* / default_model option." >&2
+      echo "agy-delegate: model '$MODEL' is not available on this plan — run \`agy models\`, then fix --model / the AGY_TIER_* / AGY_DEFAULT_MODEL setting." >&2
       signal MODEL_UNAVAILABLE "model not in \`agy models\` (check --model / tier remaps)"; exit 14 ;;
   esac
   shopt -u nocasematch
@@ -637,12 +655,12 @@ fi
 
 # Digest-size guard: the cost saving depends on the conductor ingesting a DIGEST,
 # not a raw dump — if the reply is dump-sized, say so on stderr (advisory only;
-# stdout passes through untouched). Tune via the digest_warn_chars plugin option
-# (env CLAUDE_PLUGIN_OPTION_DIGEST_WARN_CHARS; empty = 8000, 0 = off).
-WARN_CHARS="${CLAUDE_PLUGIN_OPTION_DIGEST_WARN_CHARS:-8000}"
+# stdout passes through untouched). Tune via AGY_DIGEST_WARN_CHARS (env or
+# antigravity.conf; unset = 8000, 0 = off).
+WARN_CHARS="${AGY_DIGEST_WARN_CHARS:-8000}"
 case "$WARN_CHARS" in (*[!0-9]*|'') WARN_CHARS=8000 ;; esac
 if [ "$WARN_CHARS" -gt 0 ] && [ "${#OUT}" -gt "$WARN_CHARS" ]; then
-  echo "agy-delegate: note: output is ${#OUT} chars (> ${WARN_CHARS}) — that looks like a raw dump, not a digest. Don't ingest this into the conductor's context: re-run with --digest, or have agy summarize it first. (plugin option digest_warn_chars tunes this; 0 disables.)" >&2
+  echo "agy-delegate: note: output is ${#OUT} chars (> ${WARN_CHARS}) — that looks like a raw dump, not a digest. Don't ingest this into the conductor's context: re-run with --digest, or have agy summarize it first. (AGY_DIGEST_WARN_CHARS tunes this; 0 disables.)" >&2
 fi
 
 printf '%s\n' "$OUT"

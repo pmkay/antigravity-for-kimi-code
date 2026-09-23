@@ -11,7 +11,7 @@ hooks:
       - any-glob-to-any-file: ['hooks/**']
 skill:
   - changed-files:
-      - any-glob-to-any-file: ['skills/**', 'commands/**', 'agents/**', '.claude-plugin/**']
+      - any-glob-to-any-file: ['skills/**', 'commands/**', 'agents/**', 'kimi.plugin.json', 'SYSTEM.md']
 tests:
   - changed-files:
       - any-glob-to-any-file: ['tests/**']
@@ -30,7 +30,8 @@ pricing:
 security:
   - changed-files:
       - any-glob-to-any-file:
-          - 'hooks/validate-delegate-bash.sh'
+          - 'hooks/session-start.sh'
+          - 'hooks/nudge-delegation.sh'
+          - 'agents/antigravity-delegate.md'
           - 'SECURITY.md'
-          - '.github/workflows/claude-review-external.yml'
           - '.github/workflows/quorum-review.yml'

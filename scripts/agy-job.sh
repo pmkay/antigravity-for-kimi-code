@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 #
 # agy-job.sh — background-job layer over agy-delegate.sh, à la `codex --background`.
-# For INTERACTIVE Claude Code sessions: fire a long delegation, keep working, then
-# poll :status / fetch :result. (Headless `claude -p` is one-shot — use the wrapper
-# synchronously there instead; there is no later turn to collect the result.)
+# For INTERACTIVE Kimi Code sessions: fire a long delegation, keep working, then
+# poll :status / fetch :result. Kimi's print mode (`kimi -p`) can steer a
+# background-task completion into a new turn, so background jobs CAN complete
+# headless there — but interactive sessions remain the primary case; when in
+# doubt, use the wrapper synchronously.
 #
 # Usage:
 #   agy-job.sh start  [agy-delegate options] "task"   # -> prints a JOB_ID, returns now
