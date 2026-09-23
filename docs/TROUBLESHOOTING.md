@@ -1,25 +1,50 @@
 # Troubleshooting
 
 Symptom-first guide to every problem reported so far. **Start by running `agy-doctor`**
-(or `/antigravity:setup` inside Claude Code) — it diagnoses most of the below and prints
+(or `/antigravity:setup` inside Kimi Code) — it diagnoses most of the below and prints
 the plugin version, agy version/auth state, and platform warnings.
 
 ---
 
-## "`/scripts/agy-delegate.sh: No such file or directory`" or `$CLAUDE_PLUGIN_ROOT` is empty
+## "`agy-delegate: command not found`" (or `agy-job`, `agy-doctor`, …)
 
-**Cause:** you're on a plugin version < 0.14.0. `$CLAUDE_PLUGIN_ROOT` is only substituted
-inside structured config (hooks/MCP) — it is **not** exported to the shell commands the
-model runs, so marketplace installs saw an empty path ([#11](https://github.com/yuting0624/antigravity-for-claude-code/issues/11),
-[#15](https://github.com/yuting0624/antigravity-for-claude-code/issues/15)).
+**Cause:** the plugin's wrappers reach the model's Bash via PATH. The `SessionStart`
+hook symlinks the plugin's `bin/*` into `~/.kimi-code/bin` at every session start (on
+typical installs that directory is already on PATH, because `kimi` itself lives there).
+If the links were never made, or the directory is not on your PATH, the bare names fail.
 
-**Fix:** update — since 0.14.0 everything is invoked by bare names (`agy-delegate`,
-`agy-job`, `agy-doctor`, `agy-cost-compare`) on the plugin's `bin/` PATH:
+**Fix:**
+1. `ls -l ~/.kimi-code/bin` — the `agy-*` shims should be symlinks into
+   `~/.kimi-code/plugins/managed/antigravity/bin/`. Missing → the hook has not run yet:
+   **start a new session** (hooks fire at session start).
+2. Links present but still not found → `~/.kimi-code/bin` is not on your PATH; add it,
+   or invoke the absolute path: `~/.kimi-code/plugins/managed/antigravity/bin/agy-delegate`.
+3. A **wrapper collision** warning means startup preserved an existing file, directory,
+   or unrelated symlink (including a broken link or one to another plugin install).
+   Use the direct plugin path printed in the warning. Inspect the existing entry
+   before moving or removing it; startup never force-replaces it. Substitute your
+   configured `KIMI_CODE_HOME` for `~/.kimi-code` when applicable.
 
-```
-/plugin marketplace update antigravity-for-claude-code
-/reload-plugins
-```
+---
+
+## Plugin changes not applying
+
+Installs are **copied**: the CLI runs the managed copy at
+`~/.kimi-code/plugins/managed/antigravity/`, not the directory you installed from.
+
+**Fix:** after editing plugin files (or pulling an update), **re-install**
+(`/plugins install <path-or-url>` again) and **`/reload`** — or start a new session.
+Any plugin change needs `/reload` to take effect.
+
+---
+
+## Hooks not firing / is the plugin loaded?
+
+**Fix:** `/plugins info antigravity` shows the loaded plugin, its version, and its hook
+registrations — start there. Then `/reload` (or a new session) if you just installed or
+edited the plugin. The nudge hook can also be **disabled on purpose**
+(`AGY_DELEGATION_NUDGE=off` in `~/.kimi-code/antigravity.conf`), so check the config
+before suspecting a platform problem.
 
 ---
 
@@ -40,7 +65,7 @@ hang" instead of the misleading "not authenticated".
 
 **Fix: use WSL** (fully supported):
 1. `wsl --install` (one-time; reboot)
-2. Install Claude Code **and** the Antigravity CLI *inside* WSL; authenticate agy there
+2. Install Kimi Code **and** the Antigravity CLI *inside* WSL; authenticate agy there
    (`agy models` should list models)
 3. Keep your repo on the WSL Linux filesystem (`~/project`), **not** `/mnt/c/...`
 4. Run `/antigravity:setup` from WSL — it should go green
@@ -139,14 +164,17 @@ whether the run admits it ([#10](https://github.com/yuting0624/antigravity-for-c
   (agy 1.1.25 rejects a literal `--yolo`) — works across all agy versions,
   but auto-approves **all** tools, not just the write. Required anyway for web search / URL reads
   (since agy 1.1.28; or a `read_url(<target>)` rule) / Vertex AI Search / terminal when no rule covers them. (`--mode accept-edits` is NOT a headless write grant. Measured on agy 1.1.13 — where the flag is actually applied, since 1.1.12 fixed `--mode` being ignored in headless `-p` entirely — the write is denied exactly like one without it. Earlier notes here said "soft-denied on 1.1.3"; on a build where the flag was never applied, that observation could not tell a denial apart from the flag doing nothing.)
-- Claude Code may prompt for (or in auto-mode, block) `--dangerously-skip-permissions` —
-  approve it, or pre-allow `Bash(agy-delegate*)` in your permission settings.
+- Kimi Code may ask approval before running delegation commands. Review the complete
+  command before approving it. Remove wrapper prefix allow rules copied from older
+  setup guidance: they may also match chained shell commands. The wrapper-only rule
+  is a prompt contract; Bash remains able to write files and run arbitrary commands.
+  See [SECURITY.md](../SECURITY.md).
 - Run write tasks on a **dedicated branch**. `--sandbox` is *not* containment: Measured on macOS with agy 1.1.19: with `--yolo`, `--sandbox` changed nothing — a write to an absolute path OUTSIDE `--dir` succeeded (rc 0), `id` ran and returned a real uid, and `curl https://example.com` returned 200. agy's own help says "terminal restrictions"; whatever it restricts, it is not those, and not in this combination. Not tested on Linux.
 - **Always verify files actually changed in your workspace** (`git status`) — never trust
   the self-report. The wrapper maps BOTH denial shapes — the soft deny (1.1.3+, and again
   from 1.1.20; measured on 1.1.25) and the 1.1.13 hard error — to **exit 15**, so you get
   an actionable message instead of a bare "empty output" or "agy exited 1".
-- Long write tasks can exceed Claude Code's ~2-min synchronous Bash limit → run them as a
+- Long write tasks can exceed the orchestrator's synchronous Bash budget → run them as a
   background job: `ID=$(agy-job start --tier pro --dir . "<task>")`, then
   `/antigravity:status` / `/antigravity:result <id>` (interactive sessions only).
 
@@ -167,11 +195,8 @@ On classifiable failures the wrapper prints a machine-readable line to stderr:
 | 11 | not authenticated | run `agy` once interactively to sign in |
 | 12 | timeout (agy's own, the wall-clock guard, or — agy 1.1.28+ — a `--print-timeout` that expired mid-turn: agy returns the **partial** reply with rc 0 and the wrapper prints it, then exits 12) | raise `--timeout`, narrow the task, or `--continue` the same conversation; on Windows see the hang section above |
 | 13 | agy not on PATH | install the Antigravity CLI |
-| 14 | model unavailable | the `--model` / `tier_*` / `default_model` name isn't in `agy models` (agy ≥ 1.1.2 hard-fails instead of silently downgrading) — run `agy models` and fix the name |
+| 14 | model unavailable | the `--model` / `AGY_TIER_*` / `AGY_DEFAULT_MODEL` name isn't in `agy models` (agy ≥ 1.1.2 hard-fails instead of silently downgrading) — run `agy models` and fix the name |
 | 15 | permission denied | a tool needed permission headless — **both** shapes: the soft deny (rc 0, empty stdout, `auto-denied` on stderr — agy 1.1.3+, and again from 1.1.20, measured on 1.1.25) and 1.1.13's hard error (rc 1, `user denied permission`); since 1.1.27 the tool is also named in the envelope's `denied_actions` (measured on 1.2.0). Add a `permissions.allow` rule covering the target, or pass `--yolo`; run on a branch |
-| 16 | python3 not on PATH (`agy-migrate` only) | install python3 (`brew install python3`) |
-| 17 | one or more migration steps failed (`agy-migrate` only) | read the named steps; the run is still revertible with `agy-migrate --uninstall --apply` |
-| 18 | prerequisite missing (`agy-migrate` only) | no Claude Code config dir; agy has never been run; or `--include-repos` was passed with no `git` on PATH (git is what decides which directories are repositories — install it, or drop the flag) |
 
 ---
 
@@ -194,30 +219,32 @@ command the task never needed.
 **Cause:** agy's model list is plan-dependent (Vertex plans are Gemini-only; some plans
 expose Claude/GPT). The default tier mappings may not match your plan.
 
-**Fix:** remap tiers to models you actually have — plugin options `tier_flash` /
-`tier_flash_lo` / `tier_pro` or `default_model` (exact names from `agy models`), or pass
+**Fix:** remap tiers to models you actually have — the `AGY_TIER_FLASH` /
+`AGY_TIER_FLASH_LO` / `AGY_TIER_PRO` or `AGY_DEFAULT_MODEL` keys in
+`~/.kimi-code/antigravity.conf` (exact names from `agy models`), or pass
 `--model "<exact name>"` per call.
 
 ---
 
 ## Output is huge / "looks like a raw dump, not a digest"
 
-**Cause:** the wrapper warns (stderr) when a reply exceeds `digest_warn_chars` (default
-8000). Ingesting raw dumps into the conductor's context is where the cost savings die.
+**Cause:** the wrapper warns (stderr) when a reply exceeds `AGY_DIGEST_WARN_CHARS`
+(default 8000). Ingesting raw dumps into the conductor's context is where the cost
+savings die.
 
 **Fix:** re-run with `--digest` (appends a digest-only output contract to the prompt), or
-have agy summarize before you ingest. Tune the threshold via the `digest_warn_chars`
-plugin option; `0` disables the warning.
+have agy summarize before you ingest. Tune the threshold via `AGY_DIGEST_WARN_CHARS` in
+`~/.kimi-code/antigravity.conf`; `0` disables the warning.
 
 ---
 
 ## Updating / checking your version
 
-Third-party marketplace plugins do **not** auto-update by default:
+Plugins do **not** auto-update. To update, re-install and reload:
 
 ```
-/plugin marketplace update antigravity-for-claude-code
-/reload-plugins
+/plugins install https://github.com/pmkay/antigravity-for-kimi-code
+/reload
 ```
 
 `agy-doctor` prints the installed plugin version (last line of its checks). Fixes land as
@@ -227,6 +254,6 @@ version bumps — see [CHANGELOG.md](../CHANGELOG.md).
 
 ## Still stuck?
 
-[Open a bug report](https://github.com/yuting0624/antigravity-for-claude-code/issues/new/choose)
+[Open a bug report](https://github.com/pmkay/antigravity-for-kimi-code/issues/new/choose)
 — the template asks for your `agy-doctor` output, OS, and install method, which is
 usually everything needed to diagnose in one round-trip.

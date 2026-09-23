@@ -40,4 +40,4 @@ jobs:
             - If behaviour changed, `README.md`, `skills/antigravity/SKILL.md` and `CHANGELOG.md` say so, and any claim about `agy` states what was measured and on which version.
             - Target bash 3.2 and BSD userland: no `declare -A`, `mapfile`, `${var^^}` or GNU-only flags.
 
-            Automated review starts on its own for PRs from this repository. For PRs from forks a maintainer approves the run first, so a quiet check is not a rejection.
+            Automated review (quorum-review — Gemini + Claude, independent scans) starts on its own for PRs from this repository. It does not run for forks — a quiet check there is not a rejection.

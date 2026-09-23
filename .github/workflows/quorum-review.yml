@@ -1,15 +1,13 @@
-# Second reviewer: Gemini and Claude read the diff independently, on ONE Google
+# Automated review: Gemini and Claude read the diff independently, on ONE Google
 # Cloud credential (https://github.com/yuting0624/quorum-review).
 #
-# WHY a second one, next to claude-review.yml. That workflow is a single Opus
-# scan with a prompt full of this repository's own contracts (exit codes,
-# AGY_SIGNAL/AGY_USAGE, version sync, the delegate bash gate). It is good at
-# drift and at things only this repo cares about. What it cannot do is exceed
-# one model's recall: a second opinion only ever sees findings that were already
-# reported, so a bug the scan walked past is never put in front of it. Two
-# independent scans is the only arrangement that raises the ceiling. They are
-# meant to be complementary — if this one starts repeating claude-review, narrow
-# that one's prompt rather than deleting this.
+# This is the ONLY automated reviewer now. The Claude Code original also ran a
+# single-model claude-review workflow with a prompt full of this repository's own
+# contracts (exit codes, AGY_SIGNAL/AGY_USAGE, version sync); the Kimi port deleted
+# it, and this one's two independent scans carry the review load alone. Two models
+# scanning independently is the arrangement that raises the recall ceiling: a
+# second opinion only ever sees findings that were already reported, so a bug one
+# scan walks past is only ever put in front of the other.
 #
 # NO LONG-LIVED SECRET. The GitHub OIDC token is exchanged for short-lived Google
 # Cloud credentials via Direct Workload Identity Federation, and both Gemini and
@@ -132,8 +130,9 @@ jobs:
       # local `gh` session will not reproduce that, which is how we shipped
       # exactly that bug once already.
       #
-      # Reviewing a fork on purpose is claude-review-external.yml's trust model
-      # (pull_request_target + a label whose applier is checked), not this one.
+      # Reviewing a fork on purpose was claude-review-external.yml's trust model in the
+      # Claude Code original (pull_request_target + a label whose applier is checked);
+      # the Kimi port removed that workflow, so a fork is simply not reviewed by CI.
       - name: Refuse a fork
         if: >-
           github.event_name == 'issue_comment' ||
@@ -151,7 +150,7 @@ jobs:
           head="$(gh api "repos/$REPO/pulls/$NUMBER" --jq '.head.repo.full_name')"
           echo "PR #$NUMBER head repo: $head"
           if [ "$head" != "$REPO" ]; then
-            echo "::error title=Not reviewed::#$NUMBER comes from $head. Reviewing a fork needs the label-gated claude-review-external.yml, which isolates the untrusted tree; this workflow does not."
+            echo "::error title=Not reviewed::#$NUMBER comes from $head. Fork pull requests are not reviewed by this workflow (the label-gated external-review workflow of the Claude Code original was removed in the Kimi port); review is by hand."
             exit 1
           fi
 
@@ -224,9 +223,9 @@ jobs:
           #
           # Written from the contracts this repo already documents, NOT from what
           # this reviewer previously missed — fitting it to past misses would make
-          # any later recall number meaningless. Deliberately not a copy of
-          # claude-review.yml's prompt either: two reviewers reading the same
-          # words are not two independent reads.
+          # any later recall number meaningless. Kept distinct from any single-model
+          # review prompt too: two reviewers reading the same words are not two
+          # independent reads.
           skill: .github/quorum/plugin-review.md
           # MEASURED, not copied from the docs: `claude-sonnet-5` is served in
           # `global` and returns FAILED_PRECONDITION ("not servable in region")

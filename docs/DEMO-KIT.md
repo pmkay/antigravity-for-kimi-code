@@ -5,6 +5,11 @@ into 要件定義 → 基本設計 → 詳細設計, each web-grounded), **deplo
 measure 3 arms to test whether the hybrid wins on cost **at this larger scale** (it lost
 on the small weather app — see `AB-RESULTS.md`).
 
+> Ported to Kimi Code: the original kit drove `claude` with pinned session ids; the arms
+> below drive `kimi` in per-arm directories and measure with `scripts/measure-session.py`
+> (no argument = newest session for the current directory). The numbers this kit
+> originally produced are Claude-era — see `AB-RESULTS.md`'s provenance note.
+
 Commands verified against **google-adk 2.2.0** (run on a Vertex-enabled GCP project with
 ADC + a service account holding `roles/aiplatform.user`). Adversarially reviewed; the
 host-specific traps below are real.
@@ -106,31 +111,32 @@ DELETE when done (billable): `agent_engines.get(<resource>).delete(force=True)`.
 
 ## 2. The three arms
 
-Pin the SAME model everywhere; vary only what each arm is meant to vary. Save each session id.
-
-```bash
-A1=$(uuidgen); A2=$(uuidgen); A3=$(uuidgen); echo "$A1 $A2 $A3"   # save these
-```
+Pin the SAME model everywhere (`kimi -m <alias>` or the configured default); vary only
+what each arm is meant to vary. Kimi Code has no `--session-id` to pin: each arm runs in
+its OWN directory, and `measure-session.py` with no argument measures the newest session
+for the current directory. Keep the plugin **disabled** for the solo arms (`/plugins`)
+and **enabled** for the hybrid arm — plugins are per-user, across all projects.
 
 **Arm 1 — SOLO @ high** (plugin OFF):
 ```bash
 mkdir -p ~/expB/solo-high && git -C ~/expB/solo-high init -q && cd ~/expB/solo-high
-claude --model 'claude-opus-4-8[1m]' --effort high --session-id "$A1"
+kimi
 ```
 Paste: `[§1 spec]` prepended with: `Build everything YOURSELF. Do NOT delegate to any other agent/tool.`
 
-**Arm 2 — SOLO @ max (ultracode)** (plugin OFF, identical prompt, only effort differs):
+**Arm 2 — SOLO @ max** (plugin OFF, identical prompt, only reasoning effort differs —
+use the deepest thinking mode your Kimi Code build exposes, e.g. a thinking model alias
+via `/model`):
 ```bash
 mkdir -p ~/expB/solo-max && git -C ~/expB/solo-max init -q && cd ~/expB/solo-max
-claude --model 'claude-opus-4-8[1m]' --effort max --session-id "$A2"
+kimi
 ```
 Paste: the EXACT SAME prompt as Arm 1, verbatim.
 
-**Arm 3 — HYBRID** (plugin ON; conductor @ high to match Arm 1):
+**Arm 3 — HYBRID** (plugin ON; same model + effort as Arm 1):
 ```bash
 mkdir -p ~/expB/hybrid && git -C ~/expB/hybrid init -q && cd ~/expB/hybrid
-claude --plugin-dir /Users/linyuting/antigravity-for-claude-code \
-  --model 'claude-opus-4-8[1m]' --effort high --session-id "$A3"
+kimi        # antigravity plugin installed, then /reload (or a fresh session)
 ```
 Paste: `[§1 spec]` prepended with:
 ```
@@ -145,13 +151,20 @@ delegation (single long wait, no keep-warm busy turns); review git diff only.
 
 ## 3. Measure (after all three finish)
 
+Run inside each arm's directory — with no argument the script measures the newest
+session for the current directory:
+
 ```bash
-cd ~/antigravity-for-claude-code
-python3 scripts/measure-session.py "$A1" "B/ solo@high"
-python3 scripts/measure-session.py "$A2" "B/ solo@max"
-python3 scripts/measure-session.py "$A3" "B/ hybrid"
+cd ~/expB/solo-high && python3 ~/antigravity-for-kimi-code/scripts/measure-session.py
+cd ~/expB/solo-max  && python3 ~/antigravity-for-kimi-code/scripts/measure-session.py
+cd ~/expB/hybrid    && python3 ~/antigravity-for-kimi-code/scripts/measure-session.py
 ```
-Also for the hybrid arm, price the **Gemini side** (not in measure-session.py):
+
+Keep all three main-agent-only (the default) for comparability; `--include-subagents`
+folds in the delegate subagent's turns if you want them counted. Conductor-side USD
+prices on the `kimi_k3` deck in `prices.json` — quota-based subscriptions pay no
+per-token rate, so treat that figure as a $-proxy unless you run on the paid platform
+API. Also for the hybrid arm, price the **Gemini side** (not in measure-session.py):
 `scripts/agy-cost-compare.sh` gives the per-token gap (chars/4 estimate; set real Vertex
 rates first). Report a both-decks note.
 

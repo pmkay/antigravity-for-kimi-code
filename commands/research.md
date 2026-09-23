@@ -1,11 +1,11 @@
 ---
-description: Claude-orchestrated deep research — Antigravity (agy/Gemini) does the grounded web legwork; Claude plans, verifies the citations, and synthesizes.
+description: Kimi-orchestrated deep research — Antigravity (agy/Gemini) does the grounded web legwork; Kimi plans, verifies the citations, and synthesizes.
 argument-hint: "<what to research>"
 ---
 
 Run a multi-source research pass on the topic below, following the `antigravity`
 skill's **Deep-research recipe** and **Verification gates**. Antigravity (`agy` / Gemini)
-is the cheap, grounded search worker; **you (Claude) own the plan, the verification, and
+is the cheap, grounded search worker; **you (Kimi) own the plan, the verification, and
 the synthesis**. agy's print-mode citations are coarse (often domain-level) and it can
 present parametric "knowledge" as a sourced fact — so never ship its citations unchecked.
 
@@ -22,4 +22,4 @@ Do this:
 4. **Adversarially verify (you).** Corroborate each key claim across ≥2 independent domains; treat any single / vague / domain-only citation as unverified; sanity-check dates; watch for Gemini parametric knowledge posing as a sourced fact.
 5. **Synthesize (you).** Write a cited report from verified findings only; explicitly mark anything uncorroborated as "unverified".
 
-Keep your own context lean — ingest agy's bullet digests, not the raw pages (that's where the cost savings come from). `--print` does one agentic pass per call, so re-dispatch follow-up agy calls to close gaps rather than expecting it to auto-iterate. In an interactive session a long fetch can be backgrounded with `agy-job`; when **you** are headless (`claude -p`), delegate synchronously.
+Keep your own context lean — ingest agy's bullet digests, not the raw pages (that's where the cost savings come from). `--print` does one agentic pass per call, so re-dispatch follow-up agy calls to close gaps rather than expecting it to auto-iterate. In an interactive session a long fetch can be backgrounded with `agy-job`; when **you** are headless (`kimi -p`), print mode steers background-task completions into new turns — but for a one-shot run, delegate synchronously to stay predictable.

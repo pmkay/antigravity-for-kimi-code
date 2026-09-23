@@ -4,12 +4,12 @@ Thanks for your interest! This is an early-stage, MIT-licensed community project
 issues, PRs, and even a ⭐ all genuinely help shape where it goes.
 
 **Not sure where to start?** Look for the
-[`good first issue`](https://github.com/yuting0624/antigravity-for-claude-code/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22)
+[`good first issue`](https://github.com/pmkay/antigravity-for-kimi-code/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22)
 label.
 
 ## What's especially welcome
 
-- **More A/B data points** — repeat the measured runs (n>1) for tighter confidence ([`docs/AB-RESULTS.md`](docs/AB-RESULTS.md)).
+- **More A/B data points** — repeat the measured runs (n>1) for tighter confidence ([`docs/AB-RESULTS.md`](docs/AB-RESULTS.md)); the first **Kimi-conductor** re-runs are the most valuable, since the published numbers are Claude-era.
 - **New SDLC recipes** — when-to-delegate patterns in [`skills/antigravity/SKILL.md`](skills/antigravity/SKILL.md).
 - **Support for other CLIs / models** — the delegation wrapper is intentionally thin.
 - **Real Vertex prices** — keep [`prices.json`](prices.json) accurate.
@@ -17,14 +17,17 @@ label.
 ## Dev setup
 
 You need the [Antigravity CLI](https://antigravity.google/docs/cli-using) (`agy`,
-authenticated — `agy models` should list Gemini models) and Claude Code.
+authenticated — `agy models` should list Gemini models) and Kimi Code CLI ≥ 2.x.
 
 ```bash
-git clone https://github.com/yuting0624/antigravity-for-claude-code ~/antigravity-for-claude-code
-cd ~/antigravity-for-claude-code
+git clone https://github.com/pmkay/antigravity-for-kimi-code ~/antigravity-for-kimi-code
+cd ~/antigravity-for-kimi-code
 
-# load the plugin live from your working tree ($CLAUDE_PLUGIN_ROOT resolves):
-claude --plugin-dir ~/antigravity-for-claude-code
+# install the plugin from your working tree, in the Kimi TUI:
+#   /plugins install ~/antigravity-for-kimi-code
+#   /reload
+# The CLI runs the managed copy at ~/.kimi-code/plugins/managed/antigravity/,
+# so re-install + /reload after every edit (or start a new session).
 ```
 
 The scripts also run standalone — handy for quick iteration:
@@ -37,23 +40,23 @@ scripts/agy-delegate.sh --tier flash "Summarize this in 3 bullets: ..."
 
 ```bash
 bash tests/run-tests.sh          # dependency-free; stubs `agy`, no network
-shellcheck scripts/*.sh tests/*.sh   # CI gates on --severity=error
+shellcheck scripts/*.sh tests/*.sh hooks/*.sh   # CI gates on --severity=error
 ```
 
 - **Tests pass** and shellcheck is clean (CI runs both — see [`.github/workflows/ci.yml`](.github/workflows/ci.yml)). CI runs the suite on Ubuntu **and** on macOS `/bin/bash` 3.2, so a bash-4-ism fails there even if it passed for you on Linux.
-- If you touch a manifest, `python3 -c "import json; json.load(open('.claude-plugin/plugin.json'))"` (and `marketplace.json`, `prices.json`) still parse.
+- If you touch a manifest, `python3 -c "import json; json.load(open('kimi.plugin.json'))"` (and `prices.json`) still parse.
 - **Keep the skill honest.** [`skills/antigravity/SKILL.md`](skills/antigravity/SKILL.md) is the plugin's brain — if behavior changes, update it. Don't claim a capability the code doesn't have.
 - **Cost numbers are estimates.** If you quote figures, say so and point at `prices.json`.
 - Add a line to [`CHANGELOG.md`](CHANGELOG.md). There is no "Unreleased" section: a fix goes
   under a new `## x.y.z` heading for the next patch (the maintainer bumps
-  `.claude-plugin/plugin.json` and `skills/antigravity/SKILL.md` to match — the suite pins the
+  `kimi.plugin.json` and `skills/antigravity/SKILL.md` to match — the suite pins the
   two together); a behaviour change bumps the version in its own PR.
 - **CI enforces where that line goes.** #77 filed its entry inside the already-released
   0.27.0, and #82 did it again a fortnight later; neither is a git conflict, because the two
   PRs touch different lines of the same file, so both were found by eye after merging. On
   `pull_request` the suite now compares your `CHANGELOG.md` against the base's and fails if a
   line you *added* sits under a section that has shipped. A line may sit under a heading your
-  PR opens, or under the newest heading when its version is ahead of the base's `plugin.json`
+  PR opens, or under the newest heading when its version is ahead of the base's `kimi.plugin.json`
   — that second case is what a `release:` PR needs. Locally and on push there is no base, and
   the check reports **skipped** rather than green. Two shapes it refuses on purpose:
   - **A PR stacked on another PR's branch.** Its base already carries the new heading *and*

@@ -1,7 +1,70 @@
 # Changelog
 
-All notable changes to **Antigravity for Claude Code**. Format loosely follows
-[Keep a Changelog](https://keepachangelog.com/); versions are in `.claude-plugin/plugin.json`.
+All notable changes to **Antigravity for Kimi Code** — forked from **Antigravity for
+Claude Code** at 0.28.0, so everything below the port entry is the Claude-era history.
+Format loosely follows [Keep a Changelog](https://keepachangelog.com/); versions are in
+`kimi.plugin.json` (before the port: `.claude-plugin/plugin.json`).
+
+## 0.29.0 — the Kimi Code port
+
+The orchestrator changes: **Claude Code → Kimi Code CLI** (Kimi K3 conducts; `agy` /
+Gemini executes, unchanged). Forked from the Claude Code plugin at 0.28.0.
+
+- **Manifest and policy.** `.claude-plugin/` (plugin + marketplace + userConfig) is gone;
+  the plugin is now `kimi.plugin.json` (name `antigravity`). The routing policy moves from
+  a SessionStart-injected blob to **`SYSTEM.md`**, wired through the manifest's
+  `systemPromptPath`, because Kimi's SessionStart hook is observation-only and cannot
+  inject context — the policy is now present on every surface, not just where a hook ran.
+- **Hooks, rebuilt for Kimi's events.** `hooks/session-start.sh` runs a fast agy health
+  check and symlinks the plugin's `bin/*` into `~/.kimi-code/bin` (on PATH on typical
+  installs, since `kimi` itself lives there) so the model's Bash finds `agy-delegate` by
+  bare name — Kimi exports `KIMI_PLUGIN_ROOT` to hooks but not to model-run Bash, and
+  there is no `${CLAUDE_PLUGIN_ROOT}` interpolation to lean on. `hooks/nudge-delegation.sh`
+  is the `UserPromptSubmit` bulk-work nudge: Kimi appends its stdout to the context as
+  plain text, and the nudge text is a fixed string, so the user's prompt is never echoed
+  back. `hooks/hooks.json`, `check-agy.sh`, `inject-policy.sh` and `policy-context.json`
+  went away with the old wiring.
+- **Configuration is a file now.** Kimi has no plugin-settings bridge, so the
+  `CLAUDE_PLUGIN_OPTION_*` userConfig channel is replaced by
+  `~/.kimi-code/antigravity.conf` (KEY=VALUE, loaded by `scripts/lib-config.sh`;
+  environment wins over the file). Same knobs: default tier, timeout, tier model remaps,
+  structured output, digest-warn threshold, nudge toggle, usage log. `agy-doctor` prints
+  a sample config.
+- **The delegate subagent's hard Bash gate is removed — the platform has no such hook.**
+  Claude Code allowed a per-subagent PreToolUse hook (`hooks/validate-delegate-bash.sh`,
+  the GHSA-hwv2-vjgj-8rcv control) restricting the subagent to the delegation wrappers;
+  Kimi plugin hooks are global, so that enforcement point does not exist. The mitigation
+  is a wrapper-only prompt contract in the agent body. Bash can still write files and
+  execute arbitrary commands without Write/Edit; the allowlist does not enforce
+  confinement. Wrapper prefix approval shortcuts have been removed from the docs;
+  review complete commands through Kimi's approval flow. SECURITY.md describes the
+  boundary and the need for a restricted tool or external isolation for hard confinement.
+- **`agy-migrate` and `/antigravity:migrate` are gone.** The tool existed to move a
+  Claude Code configuration onto agy; there is no Claude Code setup left to bring across.
+  `docs/MIGRATION.md` went with it.
+- **`measure-session.py` rewritten for Kimi sessions** — `~/.kimi-code/session_index.jsonl`
+  → session dirs → `agents/*/wire.jsonl` `usage.record` lines (`inputOther` / `output` /
+  `inputCacheCreation` / `inputCacheRead`), with `--include-subagents`; with no argument
+  it measures the newest session for the current directory.
+- **`prices.json`: the orchestrator deck is `kimi_k3`** ($3.00/M in, $15.00/M out,
+  $3.00/M cache writes, $0.30/M cached-in; platform.kimi.ai, September 2026).
+  Kimi Code subscriptions are quota-based, so the deck is a $-proxy for token volume unless running on the paid
+  platform API. The Claude decks are removed, and `agy-cost-compare`'s overrides are now
+  `KIMI_IN_PER_M` / `KIMI_OUT_PER_M`.
+- **Docs and CI for the fork.** README rewritten; TROUBLESHOOTING's
+  `$CLAUDE_PLUGIN_ROOT` section replaced with the Kimi PATH/`/reload` story; AB-RESULTS
+  flagged as Claude-conductor measurements; POC-PLAYBOOK and DEMO-KIT re-pointed at
+  Kimi; the Claude Code review workflows (`claude-review.yml`,
+  `claude-review-external.yml`) deleted — quorum-review stays as the only automated
+  reviewer. The version bumps in `kimi.plugin.json` and `skills/antigravity/SKILL.md`
+  accompany this entry.
+- **Startup preserves existing commands.** Matching plugin symlinks are reused;
+  regular files, directories, and unrelated or dangling links are left intact with
+  a collision warning and a direct wrapper path. No forced symlink replacement.
+- **Accounting and release regressions covered.** K3 cache writes use 1× input in
+  both the price deck and fallback. COST-WEIGHTED and USD estimates share the configured
+  rates. Tests cover cache creation, custom rates, startup collisions, and matching
+  versions across the manifest, skill, and newest changelog entry (0.29.0).
 
 ## 0.28.0
 

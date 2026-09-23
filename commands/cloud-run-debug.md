@@ -1,9 +1,9 @@
 ---
-description: Diagnose a failing Cloud Run service — Antigravity (agy/Gemini) digests the error logs cheaply, Claude infers the root cause and proposes a fix. Read-only by default; --apply writes the fix to a branch.
+description: Diagnose a failing Cloud Run service — Antigravity (agy/Gemini) digests the error logs cheaply, Kimi infers the root cause and proposes a fix. Read-only by default; --apply writes the fix to a branch.
 argument-hint: "[--service <name>] [--region <r>] [--project <id>] [--since 1h] [--limit 200] [--apply]"
 ---
 
-Diagnose a broken Cloud Run service. This is a **Conductor / Executor** split: **you (Claude)
+Diagnose a broken Cloud Run service. This is a **Conductor / Executor** split: **you (Kimi)
 conduct** — confirm scope, reason about the root cause, and propose the fix — while the cheap,
 high-volume work (pulling and clustering potentially hundreds of error log lines) is **offloaded
 to agy (Gemini)** so your context stays lean. You ingest only agy's digest, never the raw logs.
@@ -58,6 +58,6 @@ Do this:
      merge — a human reviews and merges.
    - Confirm before any destructive or hard-to-reverse step.
 
-Keep it tight: the demo is Claude conducting the diagnosis while a cheaper model does the log
+Keep it tight: the demo is Kimi conducting the diagnosis while a cheaper model does the log
 grunt-work. Report what you delegated, the root cause you landed on, and the fix (plus the diff
 if `--apply`).

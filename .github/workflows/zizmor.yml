@@ -1,7 +1,8 @@
-# GitHub Actions security analysis. Three workflows here run on pull_request_target /
-# issue_comment with OIDC and App tokens, and the changelog records two incidents in
-# exactly that area (#58, #63). zizmor audits the workflow FILES: template injection,
-# dangerous triggers, unpinned actions, persisted credentials, over-broad App tokens.
+# GitHub Actions security analysis. Workflows here run on pull_request_target /
+# issue_comment, and quorum-review holds OIDC and App tokens; the changelog records two
+# incidents in exactly that area (#58, #63). zizmor audits the workflow FILES: template
+# injection, dangerous triggers, unpinned actions, persisted credentials, over-broad App
+# tokens.
 # Results go to the Security tab as code scanning alerts; the job does not fail on
 # findings, because the baseline has known ones to triage first. Fork PRs get the
 # console report only (their token cannot upload SARIF).

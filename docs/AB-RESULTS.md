@@ -1,12 +1,20 @@
 # A/B results — the measured cost story
 
-> **Headline:** on a real, scaled build the hybrid (Claude conducts, Gemini executes)
-> cut frontier-model spend **~27% vs solo Claude @ high effort and ~64% vs @ max**, at
+> **Headline:** on a real, scaled build the hybrid (frontier conductor + Gemini executor)
+> cut frontier-model spend **~27% vs solo @ high effort and ~64% vs @ max**, at
 > **equal quality** (same `adk eval` gate) — and the cheap Gemini work isn't even counted.
+>
+> **Provenance (read before quoting):** these runs are **Claude-era** — the conductor was
+> **Claude** (headless `claude -p`, Opus) on the original Claude Code plugin. The
+> methodology carries over unchanged with **Kimi as conductor**: same levers, same gate,
+> conductor-side numbers from `scripts/measure-session.py` reading Kimi's `wire.jsonl`
+> records, priced on the `kimi_k3` deck in [`prices.json`](../prices.json). The numbers
+> below are kept as originally measured, not re-run.
 
 COST-WEIGHTED = a model-agnostic $-proxy: `output×5 + input×1 + cache_write×1.25 +
-cache_read×0.1` (standard Claude multipliers). Claude-side tokens are exact (from session
-transcripts); agy/Gemini tokens are on the cheaper deck and priced separately.
+cache_read×0.1` (the multipliers the Claude-era runs used, kept for comparability).
+Conductor-side tokens are exact (from session transcripts); agy/Gemini tokens are on the
+cheaper deck and priced separately.
 
 ## Test 2 — LARGE task (the win): build a multi-agent ADK SDLC system + `adk eval`
 
@@ -52,7 +60,7 @@ caching + a11y the solo run skipped — and on *capability*, just not on cost.)
 ## What this means
 
 - **Savings require crossing a break-even** task size + lean-context discipline (keep
-  Claude's context small, batch delegations, review diffs not trees).
+  the conductor's context small, batch delegations, review diffs not trees).
 
 ---
 

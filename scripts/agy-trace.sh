@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # agy-trace.sh — read what an agy delegation actually DID (transcript.jsonl).
-# Part of the "Antigravity for Claude Code" plugin.
+# Part of the "Antigravity for Kimi Code" plugin.
 #
 # EVERY agy run leaves a readable step-by-step JSONL trajectory — not just the
 # internal subagents spawned by invoke_subagent (which is all this tool claimed

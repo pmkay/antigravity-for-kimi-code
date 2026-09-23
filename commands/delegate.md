@@ -23,15 +23,18 @@ Do this:
    at all, the write is denied exactly like one without it. Run
    write tasks on a dedicated branch — `--sandbox` is not containment, it was measured
    doing nothing under `--yolo` — and
-   **verify files actually changed** with `git status`. Claude Code may prompt for or block
-   `--dangerously-skip-permissions` — approve it or pre-allow it; non-interactive
-   (`claude -p`) without that permission can't write/use-tools via agy. (If the wrapper
+   **verify files actually changed** with `git status`. Kimi may prompt for approval of
+   the wrapper call (its `--yolo` reaches agy as `--dangerously-skip-permissions`) —
+   approve it; non-interactive (`kimi -p`) runs tools without prompting, but agy still
+   needs its own grant to write/use-tools. (If the wrapper
    returns exit `15`, that's exactly this: agy denied the write. Both shapes land here —
    the soft deny on agy 1.1.3+ (back again from 1.1.20, measured on 1.1.25) and the hard
    error on 1.1.13–1.1.19 — and both take the same
    fix: a `permissions.allow` rule covering the target, or `--yolo`. Since agy 1.1.27 the
    wrapper names the refused tool from the envelope's `denied_actions`.)
-2. Run **synchronously** (you may be headless — do not background-and-wait):
+   If `agy-delegate` is not on PATH, use `~/.kimi-code/bin/agy-delegate` or
+   `~/.kimi-code/plugins/managed/antigravity/bin/agy-delegate`.
+2. Run **synchronously** for one-shot predictability:
    `agy-delegate --tier <tier> [--dir .] [--yolo] [--digest] "<task>"`
    For read/analysis tasks, add `--digest` — it appends a digest-only output contract so
    agy returns compact bullets instead of raw content.
@@ -45,10 +48,12 @@ Do this:
 Remember the break-even: only delegate if the offloaded volume clearly exceeds the
 spec + round-trip + verification overhead. Tiny tasks are cheaper to just do yourself.
 
-**Long task, interactive session?** A sync delegation can also hit Claude Code's ~2-min
-Bash-tool limit — start it in the background and keep working (this also keeps the prompt
-cache warm and frees you to do other turns):
+**Long task?** Kimi's Bash tool does not kill a foreground call at its timeout — it
+moves it to a background task and notifies you on completion, so even a long sync
+delegation survives. For genuinely long runs, though, prefer the job engine so you can
+keep working and collect later:
 `ID=$(agy-job start --tier pro --dir . "<task>")`
 then check `/antigravity:status` and collect with `/antigravity:result <id>`.
-(Don't do this when YOU are headless `claude -p` — one-shot, no later turn to collect;
-delegate synchronously there.)
+When **you** are headless (`kimi -p`), background-task completions are steered into new
+synthetic turns, so an `agy-job` workflow can still finish there — but for a one-shot
+run, a synchronous `agy-delegate` call is the predictable choice.

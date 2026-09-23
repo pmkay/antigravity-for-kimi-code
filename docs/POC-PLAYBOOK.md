@@ -1,9 +1,15 @@
 # PoC Playbook — measuring hybrid delegation in your org
 
 A step-by-step method for running a **defensible** proof-of-concept of the hybrid
-(Claude conducts, agy/Gemini executes) on your own codebase — one that produces numbers
+(Kimi conducts, agy/Gemini executes) on your own codebase — one that produces numbers
 you can put in front of decision-makers. It distills what we learned producing
 [`AB-RESULTS.md`](AB-RESULTS.md), including the traps.
+
+> **Provenance:** the measured lessons quoted below (`cache_read` × turns, the break-even,
+> the traps) were collected on the Claude Code original, with Claude as conductor. The
+> method is conductor-agnostic; with Kimi as conductor the conductor-side numbers come
+> from `scripts/measure-session.py` reading Kimi Code's own session records, priced on
+> the `kimi_k3` deck in [`prices.json`](../prices.json).
 
 > **The one-line thesis:** the cost driver is **`cache_read` × turns** (the conductor
 > re-reading context every turn), not output tokens. In our A/B, output barely moved
@@ -20,10 +26,12 @@ you can put in front of decision-makers. It distills what we learned producing
    > **Does the conductor have to keep the raw material in its context to be accountable
    > for the result?**
 
-   If **yes** — editing a repo, fixing a bug, anything where Claude must verify the code
-   it is responsible for — **expect parity at best, and do not build a cost story on it.**
+   If **yes** — editing a repo, fixing a bug, anything where the conductor must verify
+   the code it is responsible for — **expect parity at best, and do not build a cost
+   story on it.**
    Delegation cannot remove work the conductor has to re-derive, and it will not: measured,
-   Claude re-reads handed-over context rather than trusting it, which is the same rule that
+   the conductor re-reads handed-over context rather than trusting it, which is the same
+   rule that
    makes the hybrid safe ([§4](#4-write-task-hygiene-the-traps-pre-paid) — agy has been
    observed patching its own environment to force a green test). You cannot have "the
    conductor doesn't re-read" and "the conductor owns correctness" at once.
@@ -45,11 +53,13 @@ you can put in front of decision-makers. It distills what we learned producing
    it: a small app was ~1.4M hybrid vs ~1.0M solo). Find your break-even and report it —
    it makes the rest of your numbers credible.
 5. **Keep the conductor model FIXED across arms.** Baseline and delegation arms run on
-   the **same conductor** (e.g. Opus in both): the "−X% from delegation" claim is only
+   the **same conductor** (e.g. Kimi K3 in both): the "−X% from delegation" claim is only
    attributable — and only immune to *"you just switched to a cheaper model"* — if
-   delegation is the sole difference. (Our published A/B kept Opus across all three
-   arms for exactly this reason.) This is also delegation's **adoption advantage**:
-   nobody has to give up the frontier model — the conductor stays Opus, and the savings
+   delegation is the sole difference. (Our published A/B — Claude-era — kept Opus across
+   all three arms for exactly this reason.) This is also delegation's **adoption
+   advantage**:
+   nobody has to give up the frontier model — the conductor stays the frontier model, and
+   the savings
    come from what it no longer reads and re-does. If you ever test a cheaper conductor,
    give it its own clearly-labeled arm; never fold it into the delegation claim.
 
@@ -61,20 +71,27 @@ you can put in front of decision-makers. It distills what we learned producing
   low-risk). Expand to migrations / scaffolding / log analysis after the loop works.
 - Define a **machine-checkable pass**: the test suite goes green, an eval passes N/N,
   lint + typecheck clean. No "looks good to me".
-- The gate is **always run by Claude in a clean state** — never accept the executor's
+- The gate is **always run by the conductor (Kimi) in a clean state** — never accept the
+  executor's
   self-report (agy has been observed altering its environment to make a check pass; see
   the skill's verification gates).
 
 ## 2. Measure the baseline (no delegation)
 
-Run the representative task with solo Claude, pinned session ID, then:
+Run the representative task with solo Kimi Code (plugin disabled), in its own working
+directory, then:
 
 ```bash
-scripts/measure-session.py <session-id>
+python3 scripts/measure-session.py                          # no arg: newest session for the CURRENT directory
+python3 scripts/measure-session.py <session-id> "B/ solo"   # or pin by id, with a label
+# --include-subagents folds the delegate subagent's turns into the count
 ```
 
-- **Verify [`prices.json`](../prices.json) against your real Vertex rates first** —
-  otherwise the USD figure is fiction.
+- **Verify [`prices.json`](../prices.json) first** — the conductor side prices on the
+  `kimi_k3` deck (platform.kimi.ai per-token rates; **quota-based subscriptions pay no
+  per-token rate**, so for a subscription the USD figure is a $-proxy for token volume,
+  not a bill), the Gemini side on your real Vertex rates — otherwise the USD figure is
+  fiction.
 - Record: turns · output · `cache_read` · COST-WEIGHTED · est. USD · gate result.
 
 ## 3. Apply levers, one at a time (ROI order)
@@ -126,10 +143,9 @@ After each lever: rerun the task → rerun the gate → keep only if quality hel
   was reported *not* to match. Either way: run write tasks on a branch and verify with
   `git status`; the wrapper maps both denial shapes — the soft one (agy 1.1.3+, and again
   from 1.1.20; re-measured on 1.1.25) and 1.1.13's hard error — to exit `15`.
-- **One shared [`AGENTS.md`](https://github.com/yuting0624/antigravity-for-claude-code#-what-it-does)
-  at the repo root** — the biggest first-pass-success factor, which means fewer retries,
-  which means fewer conductor turns.
-- Long write tasks exceed the ~2-min sync Bash limit → background job (`agy-job`).
+- **One shared `AGENTS.md` at the repo root** — the biggest first-pass-success factor,
+  which means fewer retries, which means fewer conductor turns.
+- Long write tasks exceed the conductor's synchronous Bash budget → background job (`agy-job`).
 - Full symptom-first list: [`TROUBLESHOOTING.md`](TROUBLESHOOTING.md).
 
 ## 5. Record per run
@@ -163,7 +179,7 @@ than baseline; excluding it, 42.1%. Neither number is wrong — the *metric* was
 | gate result (pass/fail) | the denominator of cost-of-pass; must be machine-checkable |
 | delegations this trial | 0 means you measured the baseline twice |
 | turns · output · `cache_read` | conductor `cache_read` is the leading indicator — it *is* the carry |
-| Claude-side USD | `measure-session.py` (**Claude side only** — see below) |
+| Kimi-side USD (conductor) | `measure-session.py` (**conductor side only** — see below) |
 | agy-side USD | priced **separately**; cheap is not free |
 | wall-clock | delegation costs latency even when it saves tokens |
 
@@ -171,10 +187,10 @@ than baseline; excluding it, 42.1%. Neither number is wrong — the *metric* was
 
 Merging them is the easiest way to be badly wrong, in either direction:
 
-| | Claude / Harbor | agy / Gemini |
+| | Kimi Code (conductor) | agy / Gemini |
 |---|---|---|
-| total | `n_input = input + cache_creation + cache_read` | `total = input + output` (`thinking` is inside `output`) |
-| cached reads | `n_cache_tokens = cache_read`, an **inner subset** of the input total | `cache_read` is a **separate counter** — not in `total`, not a subset of `input` |
+| total | `inputOther + output + inputCacheCreation + inputCacheRead` (one `usage.record` per turn, so summing is safe) | `total = input + output` (`thinking` is inside `output`) |
+| cached reads | `inputCacheRead` is an **addend** in the total, priced at the cached rate (0.1× input reproduces `kimi_k3`'s cached_in exactly) | `cache_read` is a **separate counter** — not in `total`, not a subset of `input` |
 
 Price the agy side as three separate terms (`input×in + output×out + cache_read×cached`).
 Assert `input + output == total` every run and stop if it breaks rather than reinterpreting
@@ -190,17 +206,18 @@ Measured savings don't survive contact with habit. The pitch that makes adoption
 **nobody loses their good model** — developers keep the frontier conductor; the savings
 come from delegation. In enforcement-strength order:
 
-1. **Soft layer:** a `CLAUDE.md` line ("bulk work → delegate to agy per the antigravity
+1. **Soft layer:** an `AGENTS.md` line ("bulk work → delegate to agy per the antigravity
    skill; keep the conductor for architecture/hard problems"). Note the plugin already
-   injects its cost policy at session start — keep the CLAUDE.md line short to avoid
-   duplication.
+   injects its routing policy into the system prompt on every session — keep the
+   AGENTS.md line short to avoid duplication.
 2. **Recall automation (shipped in the plugin):** the delegate subagent is picked up
    proactively and a prompt-level nudge flags bulk-looking requests. Both are advisory —
-   the break-even judgment stays with Claude (full auto-routing measured as a net loss
+   the break-even judgment stays with Kimi (full auto-routing measured as a net loss
    below break-even).
 3. **Hard enforcement:** per-user/group **spend caps and RBAC via a gateway**
-   (e.g. Claude apps gateway on GCP — caps return HTTP 429 at the limit). CLAUDE.md asks;
-   gateways enforce. A spend cap also nudges delegation *without* dictating model choice.
+   (an LLM gateway in front of your model provider — caps return HTTP 429 at the limit).
+   Docs ask; gateways enforce. A spend cap also nudges delegation *without* dictating
+   model choice.
 4. **Windows fleets:** native Windows headless delegation is not supported upstream
    (hard-hang without a console — antigravity-cli#508). **Require WSL2** for
    participating Windows developers, with the repo on the WSL Linux filesystem
@@ -211,9 +228,9 @@ come from delegation. In enforcement-strength order:
 > On {task types}, the hybrid cut cost-of-pass **−X%** ({$/passing trial}, n={runs}/arm,
 > {delegations}/trial) at an **equal quality gate** ({gate}). Break-even: tasks under
 > {size}, or more than {N} delegations against the same material, are cheaper solo.
-> Claude side ${A}, agy side ${B}, accounted separately.
+> Conductor side ${A}, agy side ${B}, accounted separately.
 > Conductor {model}, executor {model}, agy {version}, measured {date};
-> rates verified against Vertex pricing on {date}.
+> rates verified against platform.kimi.ai and Vertex pricing on {date}.
 
 Always include: the break-even statement, what is *not* counted, the model/version
 triple, and the rate-verification date. The honest caveats are what make the

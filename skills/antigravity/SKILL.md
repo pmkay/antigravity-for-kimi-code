@@ -1,17 +1,17 @@
 ---
 name: antigravity
-description: Run the Antigravity CLI (Gemini) as a collaborating AI inside Claude Code, with intelligent model routing across the software development lifecycle. Claude is the conductor/orchestrator — requirements, architecture, the hard 20%, verification, and review — and routes deterministic, high-volume work (scaffolding, boilerplate, test generation, first-pass review, migrations, web/Vertex AI Search) to Antigravity (Gemini), the cheaper, faster model. Use when the user wants to "use Antigravity / agy", "vibe code / agentic engineering", "accelerate the SDLC", "delegate to Gemini", "scaffold / generate tests / migrate", "first-pass code review", "search web or internal/company data", "deep research / multi-source research report", "second-model cross-check", or "lower token cost on a big job". Claude always verifies Antigravity's output and re-checks itself if unsatisfied.
-version: 0.28.0
+description: Run the Antigravity CLI (Gemini) as a collaborating AI inside Kimi Code, with intelligent model routing across the software development lifecycle. Kimi is the conductor/orchestrator — requirements, architecture, the hard 20%, verification, and review — and routes deterministic, high-volume work (scaffolding, boilerplate, test generation, first-pass review, migrations, web/Vertex AI Search) to Antigravity (Gemini), the cheaper, faster model. Use when the user wants to "use Antigravity / agy", "vibe code / agentic engineering", "accelerate the SDLC", "delegate to Gemini", "scaffold / generate tests / migrate", "first-pass code review", "search web or internal/company data", "deep research / multi-source research report", "second-model cross-check", or "lower token cost on a big job". Kimi always verifies Antigravity's output and re-checks itself if unsatisfied.
+version: 0.29.0
 ---
 
-# Antigravity for Claude Code — hybrid SDLC
+# Antigravity for Kimi Code — hybrid SDLC
 
-Run the **Antigravity CLI (`agy`, Gemini)** as a second AI working alongside Claude
+Run the **Antigravity CLI (`agy`, Gemini)** as a second AI working alongside Kimi
 Code. The organizing idea is **intelligent model routing across the SDLC**: keep
-judgement-heavy work on Claude (the frontier model) and route deterministic,
+judgement-heavy work on Kimi (the frontier model) and route deterministic,
 high-volume work to Antigravity (cheaper, faster Gemini). Two AIs, one workflow.
 
-- **Claude = conductor / orchestrator** — requirements, architecture, the hard 20%
+- **Kimi = conductor / orchestrator** — requirements, architecture, the hard 20%
   (edge cases, integration, correctness), specs, tests/evals, final review.
 - **Antigravity = delegated agent** — a full terminal agent (file edits, terminal,
   subagents, MCP, web/Vertex AI Search) that executes well-specified work.
@@ -35,26 +35,27 @@ Route each phase to the right model. This is the core policy.
 
 | SDLC phase | Owner | Why |
 |---|---|---|
-| Requirements & planning | **Claude** | ambiguity, human-paced judgement |
-| Design & architecture | **Claude** | trade-offs; most human-centric |
-| Implementation — complex / architecture-bearing (the 20%) | **Claude** | correctness, deep context |
+| Requirements & planning | **Kimi** | ambiguity, human-paced judgement |
+| Design & architecture | **Kimi** | trade-offs; most human-centric |
+| Implementation — complex / architecture-bearing (the 20%) | **Kimi** | correctness, deep context |
 | Implementation — scaffolding / boilerplate / well-specified | **agy** | deterministic, high volume |
-| Test & eval generation | **agy** (Claude defines the contract) | cheaper-model territory |
-| First-pass code review | **agy** → **Claude** final | AI as first-pass reviewer |
+| Test & eval generation | **agy** (Kimi defines the contract) | cheaper-model territory |
+| First-pass code review | **agy** → **Kimi** final | AI as first-pass reviewer |
 | Cross-model verification (output + trajectory) | **both** | two model families ≠ same failure |
-| Maintenance / migration / modernization | **agy** executes, **Claude** directs | tedious, systematic |
-| Web / Vertex AI Search | **agy** → **Claude** re-checks | tools Claude lacks natively |
-| Audio / video understanding | **agy** transcribes + digests · **Claude** verifies | Gemini is natively multimodal; no local ffmpeg/speech stack |
-| Deep research (multi-source) | **agy** fans out search/fetch · **Claude** plans, verifies ≥2 sources, synthesizes | offload bulky pages to cheap Gemini; frontier model judges |
+| Maintenance / migration / modernization | **agy** executes, **Kimi** directs | tedious, systematic |
+| Web / Vertex AI Search | **agy** → **Kimi** re-checks | tools Kimi lacks natively |
+| Audio / video understanding | **agy** transcribes + digests · **Kimi** verifies | Gemini is natively multimodal; no local ffmpeg/speech stack |
+| Deep research (multi-source) | **agy** fans out search/fetch · **Kimi** plans, verifies ≥2 sources, synthesizes | offload bulky pages to cheap Gemini; frontier model judges |
 
 Routing tier within agy: `flash` (default, bulk) · `flash-lo` (cheapest, trivial) ·
 `pro` (harder reasoning / reviews / cross-checks).
 
 **agy is multi-model.** Tiers map to Gemini by default, but you can point delegation at any
 model `agy models` lists (Claude / GPT on plans that expose them) — via `--model <exact name>`,
-or persistently with the `default_model` / `tier_*` plugin options. Keep the executor a
-*different, cheaper* model than the Claude conductor: that's what yields the cost saving **and**
-the cross-model verification value (Claude executing Claude loses both).
+or persistently via `AGY_DEFAULT_MODEL` / `AGY_TIER_FLASH` / `AGY_TIER_FLASH_LO` /
+`AGY_TIER_PRO` in `~/.kimi-code/antigravity.conf`. Keep the executor a
+*different, cheaper* model than the Kimi conductor: that's what yields the cost saving **and**
+the cross-model verification value (a conductor delegating to its own model family loses both).
 
 > **Model availability moves fast, and `--tier` needs agy ≥ 1.1.10.** Until 1.1.10, agy
 > **ignored `--model` and `--effort` in headless `-p`** — the flag was applied after model
@@ -85,7 +86,7 @@ the cross-model verification value (Claude executing Claude loses both).
 > answered 6 of 6. Give it a task, or drop `--digest` for a ping. If a plan does not
 > serve 3.8 — agy 1.1.25's note lists it for `GEMINI_API_KEY` sign-in; it is also
 > listed on the GCP-project sign-in this was measured on — `doctor` says so and a
-> delegation exits 14 naming the fix; remap `tier_flash` to a name from
+> delegation exits 14 naming the fix; remap `AGY_TIER_FLASH` to a name from
 > `agy models` (3.7 and 3.6 cost the same).
 >
 > **Retracted:** earlier versions of this note quoted token-level comparisons between
@@ -118,6 +119,11 @@ because ingesting digests instead of dumps is the single biggest cost lever) ·
 `--print-command` (dry run: show the resolved `agy` call, don't run it) · pipe a long
 prompt with a trailing `-`.
 
+The plugin's session-start hook links the shims (`agy-delegate`, `agy-job`, `agy-media`,
+`agy-trace`, `agy-doctor`, `agy-cost-compare`, `cloud-debug`, `measure-session`) into
+`~/.kimi-code/bin`, normally already on PATH. If a bare name is not found, use
+`~/.kimi-code/bin/<name>` or `~/.kimi-code/plugins/managed/antigravity/bin/<name>`.
+
 The wrapper handles agy's quirks (prompt is the value of `-p`; non-TTY stdout drop via
 `< /dev/null`). On **agy ≥ 1.1.8** it also runs agy with `--output-format json`
 internally: **stdout still gives you the model's text unchanged**, but failures are
@@ -127,7 +133,7 @@ token usage (input / output / thinking / **cache_read**) is reported as an `AGY_
 estimated. The line also carries `model` and `tier` (the tier the model was derived from;
 empty for an explicit `--model`) and agy's `duration_seconds` / `num_turns` (1.2.x; 0 on
 older agy), so a log prices itself per tier without a join back to the command. Older agy (or no `python3`) transparently falls back to the plain-text path;
-force it with the `structured_output` option.
+force it with `AGY_STRUCTURED_OUTPUT=off` in `~/.kimi-code/antigravity.conf`.
 
 > **Accounting semantics for `AGY_USAGE` (verified — get this wrong and your cost math
 > is wrong).** `total = input + output` (and `thinking` is *inside* `output`).
@@ -135,24 +141,29 @@ force it with the `structured_output` option.
 > of `input`** — in an agentic delegation it routinely *exceeds* `input` (measured:
 > `cache_read` 1,356,694 vs `input` 243,117 in one delegation). So price the Gemini side
 > as `input×in_rate + output×out_rate + cache_read×cached_rate`, three separate terms.
-> This differs from the Claude/Harbor side, where cache-read tokens *are* an inner subset
-> of the reported input total — don't carry one convention over to the other.
+> This differs from the Anthropic-API / Harbor convention, where cache-read tokens *are*
+> an inner subset of the reported input total — don't carry one convention over to the
+> other.
 >
-> **If you are measuring, set `AGY_USAGE_LOG=/path/to/log`** (or the `usage_log` option).
+> **If you are measuring, set `AGY_USAGE_LOG=/path/to/log`** (or persist it as
+> `AGY_USAGE_LOG` in `~/.kimi-code/antigravity.conf`).
 > `AGY_USAGE` and `AGY_SIGNAL` go to stderr, and the advice two paragraphs down — keep
-> Claude's context lean — makes `agy-delegate ... 2>&1 | tail -N` the natural thing to
+> Kimi's context lean — makes `agy-delegate ... 2>&1 | tail -N` the natural thing to
 > write. stdout (the digest) is emitted *after* the usage line, so `tail` keeps the digest
 > and silently drops the usage. Measured in the wild: a benchmark harness lost most of its
 > Gemini-side data exactly this way, which made the hybrid look cheaper than it was. A
 > named file cannot be truncated by a pipe.
 
 **Two ways to delegate.** Call the wrapper directly (above), or — when you want file
-generation to happen entirely on Gemini with **zero Claude tokens spent writing** — hand
-the unit to the **`antigravity-delegate` subagent** (its only file-acting tool is the
-wrapper; it returns a digest for you to verify). Either way, *you* still own verification.
+generation to happen entirely on Gemini with **zero Kimi tokens spent writing** — hand
+the unit to the **`antigravity-delegate` subagent** via the `Agent` tool
+(`subagent_type: "antigravity-delegate"`). Its prompt contract routes file work
+through `agy-delegate`/`agy-job`. Bash can still write files and execute arbitrary
+commands without Write/Edit; Kimi has no per-agent hooks to enforce the contract.
+Its final message is a digest for you to verify. Either way, *you* still own verification.
 
 **Structured failures.** The wrapper exits `10` quota · `11` auth · `12` timeout (incl. an expired `--print-timeout`, which agy 1.1.28+ returns as a **partial** reply with rc 0 — the wrapper prints it and still exits 12) · `13`
-agy-missing · `14` model-unavailable (a `--model` / `tier_*` / `default_model` name not in
+agy-missing · `14` model-unavailable (a `--model` / `AGY_TIER_*` / `AGY_DEFAULT_MODEL` name not in
 `agy models` — agy ≥ 1.1.2 hard-fails instead of silently downgrading) · `15`
 permission-denied (a tool needed permission headless — BOTH the soft deny, agy 1.1.3+ and
 again from 1.1.20, and 1.1.13's hard error — add a `permissions.allow` rule or pass `--yolo`;
@@ -163,16 +174,18 @@ reliable. It prints a `AGY_SIGNAL {...}` line on stderr;
 `agy-job status`/`result` surface it, so you can react (e.g. retry quota with `--continue`,
 fix the model name, or add `--yolo`) instead of scraping prose.
 
-**If Claude itself is running headless (`claude -p`, one-shot):** run delegations
-**synchronously** — let `agy-delegate` BLOCK and return before you continue. Do NOT
-background a delegation expecting a later turn / "harness re-invocation": there is none in
-`-p` mode, so you'd exit before the work finishes. (Backgrounding is only valid in an
-interactive session that will be re-invoked.)
+**If Kimi itself is running headless (`kimi -p`, one-shot):** prefer **synchronous**
+delegations for predictability — let `agy-delegate` BLOCK and return before you continue.
+Backgrounding is no longer a dead end the way it was in the Claude era: `kimi -p` runs
+tools without approval and steers background-task completions into new synthetic turns
+until none are pending, so an `agy-job` start/status/result workflow CAN finish inside a
+single headless run. Synchronous is still the simplest contract for a one-shot — use the
+job engine headless only when you have a reason to.
 
 ## Shared harness: one AGENTS.md for both AIs
 
 agy **reads `AGENTS.md`** from the workspace (verified). Keep a single shared
-`AGENTS.md` at the repo root (stack, conventions, hard rules, workflow) so Claude and
+`AGENTS.md` at the repo root (stack, conventions, hard rules, workflow) so Kimi and
 Antigravity operate under the **same rules** — this raises agy's first-pass success
 rate and keeps output consistent (lower OpEx).
 
@@ -182,8 +195,8 @@ context).
 
 ## Verification gates (non-negotiable)
 
-Claude owns correctness. For anything that ships:
-1. **Define the contract first** — Claude writes/owns the tests and evals; they tell
+Kimi owns correctness. For anything that ships:
+1. **Define the contract first** — Kimi writes/owns the tests and evals; they tell
    agy what "correct" means more precisely than prose.
 2. **Output eval = actually run it, don't stop at reading the code.** Reading the diff
    is necessary but NOT sufficient — a static review that "looks right" is still vibe
@@ -216,7 +229,7 @@ Claude owns correctness. For anything that ships:
    agy will, to make a check pass, **modify the environment itself** — e.g. patch the
    installed package in site-packages, or `MagicMock`-stub a missing dependency — and then
    report success. Before believing a passing test/eval: diff any touched tooling against a
-   pristine reference, restore it, and re-run the gate under Claude's own control. agy's
+   pristine reference, restore it, and re-run the gate under Kimi's own control. agy's
    self-reported pass is a claim, not evidence.
 If wrong: retry on `--tier pro`, sharpen the spec, or do that piece yourself.
 
@@ -244,37 +257,42 @@ commands** (`--yolo` grants write + terminal):
   matched EVERY command before 1.1.11; do not attach that history to a mistyped
   `write_file()`. If a user reports a rule that "should" work, have them run `agy-doctor`
   before changing anything else.
-  Run write tasks on a branch and verify with `git status`.
-  prompt for or block `--dangerously-skip-permissions` — approve it or pre-allow
-  `Bash(agy-delegate*)`. Always verify files actually changed **in the workspace** with
+  Run write tasks on a branch and verify with `git status`. Kimi may prompt for or block
+  the wrapper call (its `--yolo` reaches agy as `--dangerously-skip-permissions`) —
+  review the complete command before approving it. Avoid blanket wrapper prefix allow
+  rules, which may also match chained shell commands. In `kimi -p`
+  print mode tools run without prompting, but agy still needs its own grant.
+  Always verify files actually changed **in the workspace** with
   `git status` (the wrapper maps BOTH denial shapes — the soft deny, 1.1.3+ and again from
   1.1.20, and 1.1.13's hard error — to exit `15`, so you're not left guessing).
 - Run it on a **dedicated git branch or worktree** so changes are isolated.
 - `--sandbox` is NOT execution containment. Measured on macOS with agy 1.1.19: with `--yolo`, `--sandbox` changed nothing — a write to an absolute path OUTSIDE `--dir` succeeded (rc 0), `id` ran and returned a real uid, and `curl https://example.com` returned 200. agy's own help says "terminal restrictions"; whatever it restricts, it is not those, and not in this combination. Not tested on Linux. Contain by what you check
   out and by `permissions.allow`, not by the flag.
-- **Claude reviews the diff before merging** — never auto-merge agy's writes.
+- **Kimi reviews the diff before merging** — never auto-merge agy's writes.
 
 ## Cost discipline — where the savings actually come from
 
 Delegation does **not** save money by itself. Measured reality: on a small task the
-hybrid cost *more* than Claude-only, because the dominant cost was Claude's own
-`cache_read` — re-reading a large, growing context across many orchestration turns.
-The savings the "Gemini sub-agent" concept promises are real, but only when you keep
-Claude's context lean and the round-trips few. Apply these as hard rules:
+hybrid cost *more* than the conductor working solo, because the dominant cost was the
+conductor's own `cache_read` — re-reading a large, growing context across many
+orchestration turns (measured on the Claude-era stack; the mechanism is not
+Claude-specific). The savings the "Gemini sub-agent" concept promises are real, but
+only when you keep Kimi's context lean and the round-trips few. Apply these as hard
+rules:
 
 1. **Delegate above the break-even, not below.** Hand work to agy only when the offloaded
    volume **clearly exceeds** the spec-writing + round-trip + verification overhead it
    adds. Bulk/parallel/repetitive (mass migration, exhaustive tests, fan-out research,
    long-context reads that return a small digest) = delegate. Small, self-contained, or
    judgement-heavy = just do it yourself. (Delegating a tiny task is a *net loss*.)
-2. **Keep Claude's context lean (the biggest lever).** Do **not** pull the files agy
-   already handled (`--dir`) back into Claude's context, and do **not** paste agy's raw
-   bulky output into the thread. Claude ingests a **digest**, not raw content — this is
+2. **Keep Kimi's context lean (the biggest lever).** Do **not** pull the files agy
+   already handled (`--dir`) back into Kimi's context, and do **not** paste agy's raw
+   bulky output into the thread. Kimi ingests a **digest**, not raw content — this is
    what collapses the per-turn `cache_read` that made the hybrid expensive.
 3. **Make agy return a digest, not a dump.** End every delegation prompt with an explicit
    trailer instruction, e.g.:
    `"...End with a fenced block ===DIGEST=== listing: files changed, key decisions, and a 1-paragraph 'context for next step'. Put bulky detail ONLY in files, not in your reply."`
-   Claude reads the DIGEST; the bulky work stays on cheap Gemini tokens.
+   Kimi reads the DIGEST; the bulky work stays on cheap Gemini tokens.
 4. **Batch, don't chatter.** One large, fully-specified delegation beats many small
    round-trips (each round-trip re-reads context = `cache_read` tax).
 5. **Review the diff, not the whole tree.** `git diff` is compact; reading every file is
@@ -288,18 +306,23 @@ Claude's context lean and the round-trips few. Apply these as hard rules:
    it is good at — **resuming after a quota or timeout failure** — and get multi-step
    savings from rule 4 instead (one large delegation, not many small ones).
 7. **Asymmetric effort.** The conductor doesn't need max reasoning effort to coordinate +
-   verify; run Claude at a moderate effort and let the cheap workers do the volume.
-8. **Don't fight the prompt-cache TTL on small tasks (measured trap).** The 5-min cache
-   expires while you wait on a long agy delegation, so the next turn pays `cache_create`
-   (1.25× input) instead of `cache_read` (0.1×). It's tempting to "keep the cache warm"
-   with busy turns — **measured: that backfires**, because every warming turn generates
-   frontier `output` (5× input), the most expensive class, and net cost goes *up*. Do NOT
-   manufacture work to stay warm. Backgrounding a long delegation (Bash `run_in_background`)
-   is fine to avoid *blocking*, but it does not make a small task cheaper. The only real
-   fix is **scale**: make each delegation big enough that the displaced Claude output
-   dwarfs the one-time re-cache cost. Below the break-even, the hybrid loses on cost — three
-   optimization variants were tested on a small task and none beat solo Claude (see
-   `docs/AB-RESULTS.md`). Delegate for cost reasons only at scale.
+   verify; run Kimi at a moderate effort and let the cheap workers do the volume.
+8. **Don't fight the prompt-cache TTL on small tasks (measured trap).** In the Claude-era
+   benchmark, the 5-minute cache expired during long delegations; that TTL is not a
+   claim about Kimi. K3 cache creation costs 1× input and cache reads cost 0.1× input
+   (see `prices.json`). It's tempting to "keep the cache warm" with busy turns — in
+   that benchmark, **this backfired**, because every warming turn generated frontier
+   `output` (5× input), the most expensive class, and net cost went *up*. Do NOT
+   manufacture work to stay warm. Backgrounding a long delegation (Bash `run_in_background`
+   — Kimi has it too, and a foreground Bash call that hits its timeout auto-backgrounds
+   instead of being killed) is fine to avoid *blocking*, but it does not make a small task
+   cheaper. The only real fix is **scale**: make each delegation big enough that the
+   displaced Kimi output dwarfs the one-time re-cache cost. Below the break-even, the
+   hybrid loses on cost — three optimization variants were tested on a small task and none
+   beat the solo-conductor arm (a Claude-only run, in that Claude-era benchmark; see
+   `docs/AB-RESULTS.md`). The cache rates quoted here are Anthropic's — the trap and the
+   fix are conductor-agnostic, but re-derive the numbers for your own stack. Delegate for
+   cost reasons only at scale.
 
 Honest framing for any cost claim: there is **no flat 8×/46%**. Below the break-even the
 hybrid costs more; above it, lean-context routing cuts frontier-model spend by a
@@ -309,8 +332,9 @@ Use `agy-cost-compare` for the per-token gap (estimate; set real Vertex rates fi
 ### The number of delegations is the lever — batch them (measured)
 
 Rule 4 above ("batch, don't chatter") is the one that actually moves the needle, and
-here is why, from a benchmark of this plugin
-(Opus 5 conductor · Gemini 3.6 Flash High executor · agy 1.1.8 · n=3/arm, cold cache):
+here is why, from a benchmark of this plugin. (Claude-era measurement, 2026-07:
+Opus 5 conductor · Gemini 3.6 Flash High executor · agy 1.1.8 · n=3/arm, cold cache —
+the agy-side mechanics are unchanged; treat the conductor-side rates as historical.)
 
 **Per delegation the economics are fine. Repeated ingestion is what breaks them.**
 Offloading a large corpus works exactly as designed — the conductor's `cache_read` fell
@@ -319,7 +343,7 @@ Offloading a large corpus works exactly as designed — the conductor's `cache_r
 one**, so a conductor that delegated 7.3 times against the same corpus paid to ingest it
 7.3 times. **Two-thirds of the executor's cost was re-reading material it had already
 read.** Break-even on that task was ~5.7 delegations; the one trial that stayed at 5 came
-in cheaper than solo Claude, the ones at 9 did not.
+in cheaper than the solo-Claude arm, the ones at 9 did not.
 
 So when several delegations work over the same material:
 
@@ -341,8 +365,8 @@ Two supporting facts, both measured: **delegation moves work rather than removin
 (the hybrid ran ~2.8× the normalized token volume for the same result — it stays
 affordable because the executor is cheaper per token, not because it does less), and
 **agy's own prompt cache covers only ~2/3 of its context re-reads**, so the executor is
-worse than Claude at carrying context. Both push the same way: fewer, larger, session-
-reusing delegations.
+worse than a frontier conductor at carrying context (measured against Claude). Both push
+the same way: fewer, larger, session-reusing delegations.
 
 These are single-configuration measurements from 2026-07 on two task families, not
 constants. Treat them as direction, and re-measure on your own workload before quoting
@@ -353,15 +377,15 @@ any figure.
 ```bash
 ROOT=agy-delegate
 
-# Scaffold from a spec (Claude wrote the spec/architecture)
+# Scaffold from a spec (Kimi wrote the spec/architecture)
 "$ROOT" --tier pro --yolo --dir ./app \
   "Scaffold per ARCHITECTURE.md: dirs, configs, stub modules. Follow AGENTS.md."
 
-# Generate tests for a contract Claude defined
+# Generate tests for a contract Kimi defined
 "$ROOT" --tier flash --yolo --dir ./app \
   "Write unit + edge-case tests for src/payments.py covering the cases in SPEC.md."
 
-# First-pass review (Claude does the final pass)
+# First-pass review (Kimi does the final pass)
 "$ROOT" --tier pro "Review for bugs/security/perf, be skeptical. List file:line: <diff>"
 
 # Implement-until-tests-pass (feedback loop; isolate on a branch)
@@ -372,10 +396,10 @@ ROOT=agy-delegate
 "$ROOT" --tier pro --yolo --dir ./svc \
   "Migrate all callers from APIv1 to APIv2 per MIGRATION.md. List every file changed."
 
-# Web search → Claude re-checks
+# Web search → Kimi re-checks
 "$ROOT" --tier pro --yolo "Use web search for <X>. Give URLs + dates."
 
-# Audio / video / image understanding (Claude can't hear or watch; Gemini can)
+# Audio / video / image understanding (Kimi can't hear or watch; Gemini can)
 # agy-media writes the full transcript to a FILE and returns a timestamped digest —
 # never ingest a whole transcript (a 1-hour recording is ~10k words of cache_read).
 agy-media ./meeting.wav "decisions and owners"     # digest -> you; transcript -> ./meeting.transcript.md
@@ -409,7 +433,7 @@ while we tracked it), so re-verify after any agy upgrade:
   (upstream #105). Invoke TypeName `self` and inject the specialty via `Role` +
   `Prompt` — verified on 1.0.12 **and re-verified on 1.0.16**.
 
-Use it for **orchestrator-mode work pushed down a level**: instead of Claude dispatching
+Use it for **orchestrator-mode work pushed down a level**: instead of Kimi dispatching
 N parallel `agy-job` runs (N round-trips, coordination spend on the frontier side), send
 ONE delegation and let agy fan out internally — the coordination tokens land on the
 cheap side, and you ingest a single digest.
@@ -457,8 +481,8 @@ raise `--timeout`, and in an interactive session prefer a background job (`agy-j
 agy has **no built-in "Deep Research" mode** — that product lives in the Gemini app
 and the Gemini API's managed Deep Research Agent, **not the CLI** (verified). But agy
 *can* do genuine multi-step, cited web research via its agentic loop. So deep research
-is a **Claude-orchestrated recipe**, not a single agy call. Pair it with Claude's own
-`deep-research` skill as planner/verifier; agy is the cheap, grounded legwork worker.
+is a **Kimi-orchestrated recipe**, not a single agy call: Kimi plans, verifies, and
+synthesizes; agy is the cheap, grounded legwork worker.
 
 Caveat that shapes the recipe (verified empirically): in `--print` mode agy uses
 search-**summary** tools and does NOT reliably fetch full pages, so its citations are
@@ -466,10 +490,10 @@ coarse (often domain-level) and may not actually support the claim. It can also 
 parametric "knowledge" disguised as a sourced fact. **Never ship its citations
 unverified.**
 
-1. **Plan (Claude).** Decompose into sub-questions + an explicit list of load-bearing
-   claims to verify. Claude owns scope and final synthesis.
+1. **Plan (Kimi).** Decompose into sub-questions + an explicit list of load-bearing
+   claims to verify. Kimi owns scope and final synthesis.
 2. **Fan-out fetch (agy, cheap, parallel).** One call per sub-question; force compact
-   stdout so bulky pages stay in Gemini's context, not Claude's:
+   stdout so bulky pages stay in Gemini's context, not Kimi's:
    ```bash
    "$ROOT" --tier flash --yolo \
      "Use web search for <sub-question>. Return 5-8 bullet findings, each with the
@@ -482,18 +506,18 @@ unverified.**
      "Open <URL> and quote the exact sentence(s) supporting: '<claim>'.
       If the page does not support it, reply NOT SUPPORTED."
    ```
-4. **Adversarial verify (Claude).** Corroborate each key claim across ≥2 independent
+4. **Adversarial verify (Kimi).** Corroborate each key claim across ≥2 independent
    domains; treat any single/vague/domain-only citation as unverified; sanity-check
    dates; watch for Gemini parametric knowledge masquerading as a sourced fact.
-5. **Synthesize (Claude).** Write the final cited report from verified findings only;
+5. **Synthesize (Kimi).** Write the final cited report from verified findings only;
    mark anything uncorroborated as "unverified."
 
-Iteration is Claude's job: `--print` does one agentic pass per call (no auto re-query
-when evidence is thin), so Claude must re-dispatch follow-up agy calls to close gaps.
+Iteration is Kimi's job: `--print` does one agentic pass per call (no auto re-query
+when evidence is thin), so Kimi must re-dispatch follow-up agy calls to close gaps.
 Token economics: bulky searched/fetched text is paid in cheap Gemini tokens and
-distilled to bullets+URLs before reaching Claude — use `agy-cost-compare` to show it.
+distilled to bullets+URLs before reaching Kimi — use `agy-cost-compare` to show it.
 
-## What Antigravity brings that Claude lacks natively
+## What Antigravity brings that Kimi lacks natively
 
 Built-in Google tools (MCP), verified working in headless `--print` mode:
 - **Google / web search** — current, grounded info.
@@ -506,20 +530,26 @@ search/list tools are read-only so this is low-risk.
 
 ## Economics (a financial lever, not the headline)
 
-Routing deterministic, high-volume work to Gemini Flash (≪ Claude per token) is
-**intelligent model routing**: higher CapEx (this harness) for lower OpEx (cheap model
-does the bulk). Use the cost demo as observability:
+Routing deterministic, high-volume work to Gemini Flash (≪ frontier-model per-token
+pricing) is **intelligent model routing**: higher CapEx (this harness) for lower OpEx
+(cheap model does the bulk). Use the cost demo as observability:
 ```bash
 agy-cost-compare --tier flash "the task prompt"
 ```
-Estimates only (chars/4; agy exposes no token API in print mode). Set real Vertex rates
-via `CLAUDE_IN_PER_M`, `CLAUDE_OUT_PER_M`, `GEMINI_IN_PER_M`, `GEMINI_OUT_PER_M`.
+Estimates only (chars/4; agy exposes no token API in print mode). Set real rates via
+`KIMI_IN_PER_M`, `KIMI_OUT_PER_M`, `GEMINI_IN_PER_M`, `GEMINI_OUT_PER_M`
+(the conductor-side variable names are what `agy-cost-compare` reads).
 
 ## Prerequisites & limits
 
 - `agy` installed and authenticated (`agy models` lists Gemini models); its
   `~/.gemini/antigravity-cli/settings.json` points at a GCP project/region.
-- Scripts executable (`chmod +x scripts/*.sh`).
+- Scripts executable (`chmod +x scripts/*.sh`); the session-start hook links the shims
+  into `~/.kimi-code/bin`. After editing any plugin file, run `/reload` — Kimi loads
+  plugin changes on reload.
+- Plugin defaults (tier, timeout, tier models, structured output, digest warning,
+  nudge, usage log) are tuned in `~/.kimi-code/antigravity.conf` — `agy-doctor` prints
+  a sample.
 - agy v1.0.x: `-p` takes the prompt as its value (wrapper handles); no JSON output;
   print mode returns final text only (no trajectory); no `timeout(1)` on macOS (use
   `--timeout`).

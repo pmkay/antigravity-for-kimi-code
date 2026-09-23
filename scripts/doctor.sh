@@ -1,11 +1,25 @@
 #!/usr/bin/env bash
 #
-# doctor.sh — read-only health check for the "Antigravity for Claude Code" plugin.
+# doctor.sh — read-only health check for the "Antigravity for Kimi Code" plugin.
 # Verifies the agy CLI is installed + authenticated and the plugin is wired up.
 #
 set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/.." && pwd)"
+
+# Plugin config (antigravity.conf via lib-config.sh, env wins) so the tier-model
+# checks below see the same remaps delegation uses. Fail soft: missing loader or
+# missing config just means the built-in defaults. Symlink-resolved like agy-delegate.sh.
+_SRC="${BASH_SOURCE[0]}"
+while [ -L "$_SRC" ]; do
+  _dir="$(cd "$(dirname "$_SRC")" && pwd)"
+  _SRC="$(readlink "$_SRC")"
+  case "$_SRC" in /*) ;; *) _SRC="$_dir/$_SRC" ;; esac
+done
+_LIB="$(cd "$(dirname "$_SRC")" && pwd)/lib-config.sh"
+if [ -f "$_LIB" ]; then . "$_LIB"; fi
+unset _SRC _dir _LIB
+
 ok()   { printf '  ✓ %s\n' "$*"; }
 bad()  { printf '  ✗ %s\n' "$*"; FAIL=1; }
 warn() { printf '  ⚠ %s\n' "$*"; }   # advisory; does NOT fail the check
@@ -255,7 +269,7 @@ on_windows_native() {
   return 1
 }
 
-echo "Antigravity for Claude Code — doctor"
+echo "Antigravity for Kimi Code — doctor"
 
 # 1. agy on PATH
 if command -v agy >/dev/null 2>&1; then
@@ -319,17 +333,17 @@ if command -v agy >/dev/null 2>&1; then
   fi
   if [ -n "$MODELS" ]; then
     ok "agy authenticated — $(printf '%s' "$MODELS" | grep -c . ) models available"
-    # 2b. configured tier->model names exist (respecting userConfig remaps). agy is
+    # 2b. configured tier->model names exist (respecting AGY_TIER_* remaps). agy is
     # multi-model and plan-dependent, so a miss is a WARNING, not a failure.
-    FLASH="${CLAUDE_PLUGIN_OPTION_TIER_FLASH:-Gemini 3.8 Flash (High)}"
-    FLASH_LO="${CLAUDE_PLUGIN_OPTION_TIER_FLASH_LO:-Gemini 3.8 Flash (Low)}"
-    PRO="${CLAUDE_PLUGIN_OPTION_TIER_PRO:-Gemini 3.1 Pro (High)}"
+    FLASH="${AGY_TIER_FLASH:-Gemini 3.8 Flash (High)}"
+    FLASH_LO="${AGY_TIER_FLASH_LO:-Gemini 3.8 Flash (Low)}"
+    PRO="${AGY_TIER_PRO:-Gemini 3.1 Pro (High)}"
     for m in "$FLASH" "$FLASH_LO" "$PRO"; do
       if model_present "$m"; then
         ok "tier model present: $m"
       else
         warn "tier model not in 'agy models': $m"
-        info "agy is multi-model/plan-dependent — remap tiers via CLAUDE_PLUGIN_OPTION_TIER_* (or set _DEFAULT_MODEL), or pass --model <name from \`agy models\`)"
+        info "agy is multi-model/plan-dependent — remap tiers via AGY_TIER_* in antigravity.conf (or set AGY_DEFAULT_MODEL), or pass --model <name from \`agy models\`)"
       fi
     done
 
@@ -428,29 +442,105 @@ EOF
   fi
 fi
 
-# 4. plugin scripts executable
+# 4. plugin manifest (Kimi Code): kimi.plugin.json at the plugin root. The hooks check
+#    below reads it, so validate it first. python3 does the parsing (the same soft
+#    dependency as the agy-side checks above); without it only existence is reported.
+PJ="$ROOT/kimi.plugin.json"
+PJ_NAME=""; PJ_VER=""
+if [ ! -f "$PJ" ]; then
+  bad "kimi.plugin.json missing at the plugin root ($ROOT)"
+  info "fix: the Kimi Code manifest ships at the plugin root — restore it from the repo"
+elif ! command -v python3 >/dev/null 2>&1; then
+  warn "python3 not on PATH — cannot validate kimi.plugin.json beyond existence"
+else
+  PJ_INFO="$(python3 -c '
+import json, sys
+try:
+    doc = json.load(open(sys.argv[1]))
+except Exception:
+    sys.exit(1)
+if not isinstance(doc, dict):
+    sys.exit(1)
+print(str(doc.get("name") or ""))
+print(str(doc.get("version") or ""))
+' "$PJ" 2>/dev/null)"; PJ_RC=$?
+  if [ "$PJ_RC" -ne 0 ]; then
+    bad "kimi.plugin.json is not valid JSON"
+    info "fix: python3 -m json.tool \"$PJ\" shows where"
+  else
+    PJ_NAME="$(printf '%s\n' "$PJ_INFO" | sed -n 1p)"
+    PJ_VER="$(printf '%s\n' "$PJ_INFO" | sed -n 2p)"
+    if [ "$PJ_NAME" != "antigravity" ]; then
+      bad "kimi.plugin.json name is '$PJ_NAME', want 'antigravity'"
+    elif [ -z "$PJ_VER" ]; then
+      bad "kimi.plugin.json carries no version"
+    else
+      ok "plugin manifest: antigravity v$PJ_VER (kimi.plugin.json)"
+    fi
+  fi
+fi
+
+# 4b. every hook command declared in the manifest exists and is executable. Commands
+#     look like "./hooks/session-start.sh" and resolve against the plugin root.
+if [ -f "$PJ" ] && command -v python3 >/dev/null 2>&1; then
+  HOOK_CMDS="$(python3 -c '
+import json, sys
+try:
+    doc = json.load(open(sys.argv[1]))
+except Exception:
+    sys.exit(1)
+for h in (doc or {}).get("hooks") or []:
+    c = (h or {}).get("command") or ""
+    if c:
+        print(c)
+' "$PJ" 2>/dev/null)"
+  if [ -z "$HOOK_CMDS" ]; then
+    info "no hook commands declared in kimi.plugin.json"
+  else
+    while IFS= read -r hc; do
+      [ -n "$hc" ] || continue
+      rel="${hc#./}"
+      if [ -x "$ROOT/$rel" ]; then ok "hook $hc executable"; else
+        bad "hook $hc missing or not executable"
+        info "fix: chmod +x \"$ROOT/$rel\" (or restore it from the repo)"
+      fi
+    done <<EOF
+$HOOK_CMDS
+EOF
+  fi
+fi
+
+# 4c. plugin scripts executable
 for s in agy-delegate.sh agy-cost-compare.sh cloud-debug.sh agy-trace.sh agy-media.sh; do
   if [ -x "$HERE/$s" ]; then ok "$s executable"; else
     bad "$s not executable"; info "fix: chmod +x \"$HERE/$s\""
   fi
 done
 
-# 4b. SessionStart hooks executable
-for h in check-agy.sh inject-policy.sh validate-delegate-bash.sh nudge-delegation.sh; do
-  if [ -x "$ROOT/hooks/$h" ]; then ok "hooks/$h executable"; else
-    bad "hooks/$h not executable"; info "fix: chmod +x \"$ROOT/hooks/$h\""
-  fi
-done
-
-# 4b2. bin/ entrypoints executable (added to the Bash-tool PATH; commands/skills call
-#      these bare names — $CLAUDE_PLUGIN_ROOT is not exported to model-run Bash, issue #11)
+# 4d. bin/ entrypoints executable (linked into ~/.kimi-code/bin by the session-start
+#     hook; commands/skills call these bare names — the plugin root is NOT exported to
+#     model-run Bash, issue #11 in the Claude original)
 for b in agy-delegate agy-job agy-cost-compare agy-doctor cloud-debug agy-trace measure-session agy-media; do
   if [ -x "$ROOT/bin/$b" ]; then ok "bin/$b executable"; else
     bad "bin/$b not executable"; info "fix: chmod +x \"$ROOT/bin/$b\""
   fi
 done
 
-# 4c. WSL: agy --add-dir over a Windows mount (/mnt/*) reads via a slow 9p bridge
+# 4e. shim reachability: the session-start hook links bin/* into KIMI_CODE_HOME/bin at
+#     every session start, so the bare names resolve for the model's Bash tool.
+KIMI_BIN="${KIMI_CODE_HOME:-$HOME/.kimi-code}/bin"
+if command -v agy-delegate >/dev/null 2>&1; then
+  ok "shim reachable on PATH: $(command -v agy-delegate)"
+elif [ -x "$KIMI_BIN/agy-delegate" ]; then
+  ok "shim linked at $KIMI_BIN/agy-delegate (session-start hook)"
+  info "not on THIS shell's PATH — fine as long as $KIMI_BIN is on the model's PATH (\`kimi\` itself usually lives there)"
+else
+  warn "agy-delegate shim not reachable (not on PATH, not linked in $KIMI_BIN)"
+  info "fix: start a new session so the plugin's session-start hook links the shims,"
+  info "and/or ensure $KIMI_BIN is on PATH — \`kimi\` itself is typically installed there."
+fi
+
+# 4f. WSL: agy --add-dir over a Windows mount (/mnt/*) reads via a slow 9p bridge
 if grep -qi microsoft /proc/version 2>/dev/null || [ -n "${WSL_DISTRO_NAME:-}" ]; then
   case "$PWD" in
     /mnt/*)
@@ -461,9 +551,20 @@ if grep -qi microsoft /proc/version 2>/dev/null || [ -n "${WSL_DISTRO_NAME:-}" ]
   esac
 fi
 
-# 5. plugin version
-PJ="$ROOT/.claude-plugin/plugin.json"
-[ -f "$PJ" ] && ok "plugin: $(sed -n 's/.*"version"[: ]*"\([^"]*\)".*/v\1/p' "$PJ" | head -1)"
+# 5. plugin config file (optional — every key has a built-in default). Doctor stays
+#    read-only: a missing file is reported, never written.
+AGY_CONF="${AGY_CONFIG:-${KIMI_CODE_HOME:-$HOME/.kimi-code}/antigravity.conf}"
+if [ -f "$AGY_CONF" ]; then
+  ok "plugin config: $AGY_CONF"
+else
+  info "no plugin config at $AGY_CONF — built-in defaults are in use"
+  info "to override, create it with KEY=VALUE lines, e.g.:"
+  info "  # AGY_DEFAULT_TIER=flash        # flash | flash-lo | pro"
+  info "  # AGY_TIMEOUT=5m                # default delegation timeout"
+  info "  # AGY_STRUCTURED_OUTPUT=on      # agy --output-format json"
+  info "  # AGY_DIGEST_WARN_CHARS=8000    # digest-size warning (0 = off)"
+  info "  # AGY_USAGE_LOG=/abs/usage.log  # append AGY_USAGE/AGY_SIGNAL lines"
+fi
 
 echo ""
 if [ "$FAIL" -eq 0 ]; then echo "All checks passed — ready to delegate."; else
