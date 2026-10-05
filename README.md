@@ -15,7 +15,7 @@ Kimi conducts the judgement; Gemini does the heavy lifting — intelligent model
 
 </div>
 
-**Kimi port: 0.29.1.** See [CHANGELOG.md](CHANGELOG.md) for the release details.
+**Kimi port: 0.29.2.** See [CHANGELOG.md](CHANGELOG.md) for the release details.
 
 > **Port scope:** Kimi Code replaces Claude Code as the conductor; the executor (`agy`) is unchanged. Claude-era differences are called out where they matter, and the measured A/B data below comes from the original project and is labelled as such.
 

@@ -5,6 +5,13 @@ Claude Code** at 0.28.0, so everything below the port entry is the Claude-era hi
 Format loosely follows [Keep a Changelog](https://keepachangelog.com/); versions are in
 `kimi.plugin.json` (before the port: `.claude-plugin/plugin.json`).
 
+## 0.29.2
+
+- Fix intermittent macOS lifecycle-test teardown errors: clean orphaned process
+  groups only once and skip PID records from wrappers that already completed.
+  Reproduce the duplicate-signal permission failure in the SIGKILL regression
+  without suppressing genuine cleanup errors; always release temporary resources.
+
 ## 0.29.1
 
 - Add `agy-delegate --print-budget` so callers can size the enclosing task timeout

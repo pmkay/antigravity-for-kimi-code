@@ -10,6 +10,7 @@ import sys
 import tempfile
 import time
 import unittest
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 DELEGATE = ROOT / "scripts/agy-delegate.sh"
@@ -69,25 +70,46 @@ class LifecycleTests(unittest.TestCase):
             self.env.pop(key, None)
         self.processes = []
         self.streams = []
+        self.cleaned_groups = set()
+
+    def cleanup_orphaned_groups(self):
+        # Completed wrappers already clean their children. After SIGKILL, the
+        # record survives but can quickly become stale: signal each orphaned
+        # group at most once, including when cleanup runs again in tearDown.
+        for record in Path(self.env["AGY_RUNS_DIR"]).glob("*/child_pid"):
+            if (record.parent / "exit_code").exists():
+                continue
+            try:
+                group = int(record.read_text())
+            except ValueError:
+                continue
+            if group in self.cleaned_groups:
+                continue
+            try:
+                os.killpg(group, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            # A real permission failure must still fail the test. Only mark a
+            # group cleaned after the signal succeeded or it no longer exists.
+            self.cleaned_groups.add(group)
 
     def tearDown(self):
-        for p in self.processes:
-            if p.poll() is None:
-                p.terminate()
-                try:
-                    p.wait(timeout=5)
-                except subprocess.TimeoutExpired:
-                    p.kill()
-                    p.wait(timeout=2)
-        # SIGKILL tests intentionally bypass cleanup. Never let their fixtures leak.
-        for record in Path(self.env["AGY_RUNS_DIR"]).glob("*/child_pid"):
+        try:
+            for p in self.processes:
+                if p.poll() is None:
+                    p.terminate()
+                    try:
+                        p.wait(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        p.kill()
+                        p.wait(timeout=2)
+        finally:
             try:
-                os.killpg(int(record.read_text()), signal.SIGKILL)
-            except (ProcessLookupError, ValueError):
-                pass
-        for stream in self.streams:
-            stream.close()
-        self.tmp.cleanup()
+                self.cleanup_orphaned_groups()
+            finally:
+                for stream in self.streams:
+                    stream.close()
+                self.tmp.cleanup()
 
     def call(self, *args, env=None, timeout=20):
         return subprocess.run([str(DELEGATE), *args], cwd=self.root,
@@ -158,6 +180,10 @@ class LifecycleTests(unittest.TestCase):
         self.assertEqual(json.loads((rd / "stdout").read_text())["conversation_id"], "test-conversation")
         self.assertIn("test-conversation", (rd / "events.log").read_text())
         self.assertEqual((rd / "response").read_text(), "digest: ok")
+        # Completion records make these PID files stale, even if the OS has
+        # already recycled the group ID. Cleanup must not signal them again.
+        with mock.patch.object(os, "killpg", side_effect=AssertionError("completed group signalled")):
+            self.cleanup_orphaned_groups()
 
     def test_outer_termination_retains_edits_and_logs_and_stops_descendant(self):
         p = self.launch()
@@ -185,8 +211,26 @@ class LifecycleTests(unittest.TestCase):
         self.assertIn("partial reply", (rd / "stdout").read_text())
         self.assertEqual((rd / "state").read_text().strip(), "running")
         self.assertFalse((rd / "exit_code").exists())
-        # The test must clean up: SIGKILL cannot execute the wrapper's exit trap.
-        os.killpg(int((rd / "child_pid").read_text()), signal.SIGKILL)
+        # Reproduce the macOS CI failure deterministically: a second signal to
+        # the group would raise EPERM after the first successful SIGKILL. Exercise
+        # the same cleanup path here and in tearDown, without masking real errors.
+        with mock.patch.object(os, "killpg", side_effect=PermissionError("live group denied")):
+            with self.assertRaises(PermissionError):
+                self.cleanup_orphaned_groups()
+
+        killpg = os.killpg
+        signalled = set()
+
+        def kill_once(group, sig):
+            if group in signalled:
+                raise PermissionError("process group already cleaned")
+            signalled.add(group)
+            return killpg(group, sig)
+
+        with mock.patch.object(os, "killpg", side_effect=kill_once) as send_signal:
+            self.cleanup_orphaned_groups()
+            self.cleanup_orphaned_groups()
+            send_signal.assert_called_once_with(int((rd / "child_pid").read_text()), signal.SIGKILL)
 
     def test_sigint_also_cleans_up_and_records_interruption(self):
         p = self.launch()
