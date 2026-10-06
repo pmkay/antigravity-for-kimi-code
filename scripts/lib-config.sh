@@ -21,11 +21,12 @@
 #   AGY_STRUCTURED_OUTPUT   on/off: agy --output-format json (default: on)
 #   AGY_DIGEST_WARN_CHARS   digest-size warning threshold  (default: 8000; 0 = off)
 #   AGY_DELEGATION_NUDGE    on/off: bulk-work nudge hook   (default: on)
+#   AGY_RUNS_DIR            private run diagnostics directory
 #   AGY_USAGE_LOG           absolute path: append AGY_USAGE/AGY_SIGNAL lines
 #
 # Usage:  . "$(dirname "$0")/lib-config.sh"
 
-_agy_keys="AGY_DEFAULT_TIER AGY_TIMEOUT AGY_DEFAULT_MODEL AGY_TIER_FLASH AGY_TIER_FLASH_LO AGY_TIER_PRO AGY_STRUCTURED_OUTPUT AGY_DIGEST_WARN_CHARS AGY_DELEGATION_NUDGE AGY_USAGE_LOG"
+_agy_keys="AGY_DEFAULT_TIER AGY_TIMEOUT AGY_DEFAULT_MODEL AGY_TIER_FLASH AGY_TIER_FLASH_LO AGY_TIER_PRO AGY_STRUCTURED_OUTPUT AGY_DIGEST_WARN_CHARS AGY_DELEGATION_NUDGE AGY_USAGE_LOG AGY_RUNS_DIR"
 
 _agy_cfg="${AGY_CONFIG:-${KIMI_CODE_HOME:-$HOME/.kimi-code}/antigravity.conf}"
 if [ -f "$_agy_cfg" ]; then

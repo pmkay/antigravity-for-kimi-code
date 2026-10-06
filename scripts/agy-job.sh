@@ -1,11 +1,9 @@
 #!/usr/bin/env bash
 #
 # agy-job.sh — background-job layer over agy-delegate.sh, à la `codex --background`.
-# For INTERACTIVE Kimi Code sessions: fire a long delegation, keep working, then
-# poll :status / fetch :result. Kimi's print mode (`kimi -p`) can steer a
-# background-task completion into a new turn, so background jobs CAN complete
-# headless there — but interactive sessions remain the primary case; when in
-# doubt, use the wrapper synchronously.
+# Fire a long delegation, keep working, then check :status / collect :result.
+# This registry does not register a native Kimi Bash completion notification.
+# For a direct wrapper call, calculate the enclosing budget with --print-budget.
 #
 # Usage:
 #   agy-job.sh start  [agy-delegate options] "task"   # -> prints a JOB_ID, returns now
@@ -55,7 +53,8 @@ rc_label() {
     3)  echo 'empty output' ;;
     10) echo 'QUOTA — retry later with --continue' ;;
     11) echo 'AUTH required — run `agy` once interactively' ;;
-    12) echo 'TIMEOUT — raise --timeout or narrow scope (agy 1.1.28+: the PARTIAL reply is in the output; --continue resumes the conversation)' ;;
+    12) echo 'TIMEOUT — inspect diagnostics and existing edits, verify, then resume the recorded conversation only if work remains (agy 1.1.28+: output may be PARTIAL)' ;;
+    129|130|143) echo 'INTERRUPTED — inspect retained diagnostics and workspace edits before retrying' ;;
     13) echo 'agy MISSING — install the Antigravity CLI' ;;
     14) echo 'MODEL unavailable — check `agy models` / tier remap' ;;
     # Both denial shapes: the soft deny (agy 1.1.3+, and again from 1.1.20) and 1.1.13's hard error.
@@ -73,7 +72,13 @@ case "$cmd" in
     jd="$REG/$id"; mkdir -p "$jd"
     { echo "id=$id"; echo "cwd=$PWD"; echo "started=$(date -u +%FT%TZ 2>/dev/null || date)";
       echo "task=$(printf '%s' "${!#}" | tr '\n' ' ' | cut -c1-200)"; } > "$jd/meta"
-    ( nohup "$DELEGATE" "$@" >"$jd/out" 2>"$jd/err"; echo $? >"$jd/rc" ) >/dev/null 2>&1 &
+    (
+      nohup "$DELEGATE" "$@" < /dev/null >"$jd/out" 2>"$jd/err" &
+      delegate_pid=$!
+      echo "$delegate_pid" > "$jd/delegate_pid"
+      wait "$delegate_pid"
+      echo $? > "$jd/rc"
+    ) >/dev/null 2>&1 &
     echo $! > "$jd/pid"
     disown 2>/dev/null || true
     echo "$id"
@@ -98,6 +103,8 @@ case "$cmd" in
     echo "job:    $(basename "$jd")"
     sed 's/^/  /' "$jd/meta" 2>/dev/null
     if [ -n "$rc" ]; then echo "  state=$st (rc=$rc: $(rc_label "$rc"))"; else echo "  state=$st"; fi
+    run_record="$(grep -m1 '^AGY_RUN ' "$jd/err" 2>/dev/null || true)"
+    if [ -n "$run_record" ]; then echo "  run=${run_record#AGY_RUN }"; fi
     sig="$(grep -m1 '^AGY_SIGNAL ' "$jd/err" 2>/dev/null || true)"
     if [ -n "$sig" ]; then echo "  signal=${sig#AGY_SIGNAL }"; fi
     ;;
@@ -111,11 +118,40 @@ case "$cmd" in
     ;;
   cancel)
     jd="$(jobdir "${1:-}")"
+    if [ -f "$jd/rc" ]; then echo "not running"; exit 0; fi
     pid="$(cat "$jd/pid" 2>/dev/null || true)"
     if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
-      pkill -P "$pid" 2>/dev/null || true   # children (agy) first
-      kill "$pid" 2>/dev/null || true
-      echo "cancelled $(basename "$jd")"
+      # Let the wrapper clean its process group and the worker collect its exit
+      # code. Killing the worker first loses the result and can leave writers alive.
+      # A start may have just returned before the delegate PID was written.
+      for _ in 1 2 3 4 5 6 7 8 9 10; do
+        [ -s "$jd/delegate_pid" ] && break
+        sleep 0.1
+      done
+      delegate_pid="$(cat "$jd/delegate_pid" 2>/dev/null || true)"
+      if [ -n "$delegate_pid" ]; then
+        # Only signal a current child of this worker, not a recycled stored PID.
+        actual_parent="$(ps -o ppid= -p "$delegate_pid" 2>/dev/null | tr -d '[:space:]')"
+        if [ "$actual_parent" = "$pid" ]; then
+          kill -TERM "$delegate_pid" 2>/dev/null || true
+        elif [ -n "$actual_parent" ] && [ ! -f "$jd/rc" ]; then
+          echo "worker identity changed; inspect job state before cancelling"
+          exit 2
+        fi
+      else
+        # Compatibility with jobs started by older plugin versions.
+        pkill -TERM -P "$pid" 2>/dev/null || true
+      fi
+      for _ in 1 2 3 4 5 6 7 8 9 10; do
+        [ -f "$jd/rc" ] && break
+        sleep 0.5
+      done
+      if [ -f "$jd/rc" ]; then
+        echo "cancelled $(basename "$jd") (rc=$(cat "$jd/rc"))"
+      else
+        echo "cancellation requested for $(basename "$jd"); confirm worker exit before retrying"
+        exit 2
+      fi
     else
       echo "not running"
     fi

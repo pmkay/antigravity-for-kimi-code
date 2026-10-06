@@ -37,6 +37,7 @@
 #       --conversation <id>          Resume a specific agy conversation by ID (stateful)
 #   -m, --model <exact name>         Use an exact agy model (any from `agy models`: Gemini/Claude/GPT…)
 #       --print-command              Print the resolved agy command and exit (dry run)
+#       --print-budget               Print timeout budgets as JSON and exit (no prompt/agy needed)
 #   -h, --help                       Show this help
 #
 # Exit codes: 0 ok | 1 usage | 2 agy failed | 3 empty | 10 quota | 11 auth | 12 timeout
@@ -50,6 +51,7 @@
 #             |    denied_actions, measured on 1.2.0) and 1.1.13's hard error (rc 1, "user
 #             |    denied permission", 1.1.13-1.1.19). Add a permissions.allow rule, or --yolo.
 #             |    URL reads need a grant too since 1.1.28 (read_url(<target>), or the flag).
+#             | 129/130/143 interrupted by HUP/INT/TERM; inspect edits before retrying
 #
 # On a classifiable failure, a machine-readable line is printed to stderr so
 # orchestrators (e.g. agy-job.sh) can react without scraping prose:
@@ -62,6 +64,9 @@
 # picked from ("tier" is empty when --model or AGY_DEFAULT_MODEL chose the model), plus
 # agy's own duration_seconds and num_turns (1.2.x envelope; 0 on older agy) — so a
 # log can be priced per tier without joining it back to the command that produced it.
+# Every launched run emits AGY_RUN on stderr with its private diagnostic directory.
+# Raw output and lifecycle records persist in AGY_RUNS_DIR (default:
+# ${KIMI_CODE_HOME:-~/.kimi-code}/antigravity-runs), including after interruption.
 #
 # agy is multi-model: tiers map to Gemini by default, but you can point delegation at any
 # model `agy models` lists (e.g. Claude/GPT on plans that expose them). Defaults come from
@@ -87,6 +92,7 @@ while [ -L "$_SRC" ]; do
 done
 _LIB="$(cd "$(dirname "$_SRC")" && pwd)/lib-config.sh"
 if [ -f "$_LIB" ]; then . "$_LIB"; fi
+. "$(dirname "$_LIB")/lib-delegate-run.sh"
 unset _SRC _dir _LIB
 
 TIER="${AGY_DEFAULT_TIER:-flash}"
@@ -102,6 +108,8 @@ PROMPT=""
 CONTINUE=0
 CONV_ID=""
 PRINT_CMD=0
+PRINT_BUDGET=0
+RUN_DIR=""
 DENIED_ACTIONS=""   # tool names from the envelope's denied_actions (agy 1.1.27+), for the message
 
 die() { echo "agy-delegate: $*" >&2; exit 1; }
@@ -123,6 +131,9 @@ need() { [ "$1" -ge 2 ] || die "option '$2' needs a value"; }
 # Appended to, never truncated; failure to write is non-fatal (measurement must not break work).
 USAGE_LOG="${AGY_USAGE_LOG:-}"
 tee_usage() { # $1 = the full line, already formatted
+  if [ -n "$RUN_DIR" ]; then
+    printf '%s\n' "$1" >> "$RUN_DIR/events.log" || true
+  fi
   [ -n "$USAGE_LOG" ] || return 0
   # `2>/dev/null` FIRST: redirections apply left to right, so with `>>"$f" 2>/dev/null`
   # the append is attempted while stderr is still the real stderr — an unwritable path
@@ -229,19 +240,27 @@ timeout_cmd() {
   return 1
 }
 
-# Convert an agy-style duration (e.g. 5m, 300s, 1h, or a bare number=seconds) to
-# whole seconds, then add a small head-room margin so the OUTER wall-clock guard
-# fires only AFTER agy's own --print-timeout has had its chance. Echoes seconds.
-outer_timeout_secs() {
-  local d="${1:-5m}" n unit secs
+# Convert documented integer durations without silently budgeting a different
+# timeout than the value passed to agy. Limit length to avoid arithmetic overflow.
+duration_secs() {
+  local d="$1" n unit secs
   n="${d%[smh]}"; unit="${d#"$n"}"
-  case "$n" in (*[!0-9]*|'') n=300; unit=s ;; esac
+  case "$n" in (*[!0-9]*|'') die "invalid timeout '$d' (use positive seconds, Nm, or Nh)" ;; esac
+  [ "${#n}" -le 9 ] || die "timeout is too large: $d"
+  n=$((10#$n))
   case "$unit" in
     h) secs=$(( n * 3600 )) ;;
     m) secs=$(( n * 60 )) ;;
     s|'') secs=$(( n )) ;;
-    *) secs=$(( n )) ;;
+    *) die "invalid timeout unit: $d" ;;
   esac
+  [ "$secs" -gt 0 ] || die "timeout must be positive"
+  echo "$secs"
+}
+
+outer_timeout_secs() {
+  local secs
+  secs="$(duration_secs "$1")" || return 1
   # head-room so the OUTER guard never pre-empts agy's own --print-timeout on a
   # legitimately-slow-but-progressing call: +25% of the budget, min 10s, capped 120s.
   local pad=$(( secs / 4 ))
@@ -265,6 +284,7 @@ while [ $# -gt 0 ]; do
     -c|--continue)  CONTINUE=1; shift ;;            # resume most recent agy conversation
     --conversation) need "$#" "$1"; CONV_ID="$2"; shift 2 ;; # resume a specific conversation by ID
     -m|--model)     need "$#" "$1"; MODEL="$2"; shift 2 ;;
+    --print-budget) PRINT_BUDGET=1; shift ;;
     --print-command) PRINT_CMD=1; shift ;;          # dry run: show the resolved agy command
     -h|--help)      usage ;;
     -)              PROMPT="$(cat)"; shift ;;       # read prompt from stdin
@@ -273,6 +293,18 @@ while [ $# -gt 0 ]; do
     *)              PROMPT="$*"; break ;;            # rest is the prompt
   esac
 done
+
+PRINT_SECS="$(duration_secs "$TIMEOUT")"
+TO_SECS="$(outer_timeout_secs "$TIMEOUT")"
+# Allow the 15s help probe + 5s kill grace, the main guard's 10s kill grace,
+# process cleanup, and result processing. The caller must actually configure its
+# harness with this budget; the wrapper cannot extend an enclosing tool deadline.
+HARNESS_SECS=$((TO_SECS + 60))
+if [ "$PRINT_BUDGET" -eq 1 ]; then
+  printf '{"print_timeout_seconds":%s,"guard_timeout_seconds":%s,"minimum_harness_timeout_seconds":%s}\n' \
+    "$PRINT_SECS" "$TO_SECS" "$HARNESS_SECS"
+  exit 0
+fi
 
 [ -n "$PROMPT" ] || die "no prompt given (pass a string, or '-' to read stdin)"
 # --print-command is a dry run (introspection), so it doesn't require agy on PATH.
@@ -385,12 +417,7 @@ for d in "${ADD_DIRS[@]:-}"; do [ -n "$d" ] && ARGS+=(--add-dir "$d"); done
 # an unguarded call is an unguarded call.
 TO_CMD="$(timeout_cmd || true)"
 
-# One trap for every temp file this script makes, installed before the first one
-# exists. Declaring them empty up front means the probe's file is covered too —
-# it used to be cleaned by a trailing `rm -f`, which a SIGINT during the probe
-# skips. `rm -f ""` is a silent no-op, so the unset ones cost nothing.
-HELPF=""; ERR=""; OUTF=""
-trap 'rm -f "$HELPF" "$ERR" "$OUTF" 2>/dev/null' EXIT
+if [ "$PRINT_CMD" -ne 1 ]; then start_run; fi
 
 JSON_MODE=0
 raw_so="${AGY_STRUCTURED_OUTPUT:-on}"
@@ -404,18 +431,19 @@ case "$(printf '%s' "$raw_so" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')"
       # disabling JSON mode. That race actually bit a benchmark run (~75% of calls on a
       # loaded container), and it is indistinguishable from "no delegation happened",
       # which is the worst kind of failure. Capture once, match with a shell glob.
-      # Same pipe hazard as the main call (issue #37): route via a temp file so
+      # Same pipe hazard as the main call (issue #37): route via a regular file so
       # inherited MCP children can never hold the capture pipe open.
-      HELPF="$(mktemp "${TMPDIR:-/tmp}/agy-help.XXXXXX")"
+      HELPF="$RUN_DIR/help"
+      printf '%s\n' probing > "$RUN_DIR/state"
       # 15s is ~180x the measured time; it fires only on a real hang, and losing
       # JSON mode is the right failure — the plain-text path still works.
       if [ -n "$TO_CMD" ]; then
-        "$TO_CMD" --kill-after=5 15 agy --help >"$HELPF" 2>&1 || true
+        run_child "$HELPF" "$RUN_DIR/help.stderr" "$TO_CMD" --kill-after=5 15 agy --help || true
       else
-        agy --help >"$HELPF" 2>&1 || true
+        run_child "$HELPF" "$RUN_DIR/help.stderr" agy --help || true
       fi
-      # `|| true` so the assignment cannot fail under `set -e` and skip the rm.
-      agy_help="$(cat "$HELPF" 2>/dev/null || true)"; rm -f "$HELPF"
+      # `|| true` so a probe read failure falls back without aborting the run.
+      agy_help="$(cat "$HELPF" "$RUN_DIR/help.stderr" 2>/dev/null || true)"
       case "$agy_help" in
         *--output-format*) JSON_MODE=1; ARGS+=(--output-format json) ;;
       esac
@@ -429,22 +457,20 @@ if [ "$PRINT_CMD" -eq 1 ]; then
 fi
 
 # --- run (always detach stdin so non-TTY stdout is not dropped) ---
-# Per-invocation temp file for stderr (mktemp avoids the race + symlink risk of a
-# fixed /tmp path when multiple delegations run concurrently). Cleaned up on exit.
-ERR="$(mktemp "${TMPDIR:-/tmp}/agy-delegate.XXXXXX")"
+# Per-invocation files survive outer-task interruption and are announced at launch.
+ERR="$RUN_DIR/stderr"
 # stdout goes to a file too, never a command-substitution pipe: agy's stdio MCP
 # children inherit our stdout and can outlive agy, so `$(agy ...)` blocks forever
 # waiting for EOF even after `timeout` kills agy itself (issue #37). A regular
 # file is inherited harmlessly. agy 1.1.24 fixed the upstream cause (FD_CLOEXEC on
 # the preserved streams); the file route stays — it costs nothing, and older agy hangs.
-OUTF="$(mktemp "${TMPDIR:-/tmp}/agy-out.XXXXXX")"
+OUTF="$RUN_DIR/stdout"
 
 # Wall-clock guard: on a non-TTY caller (the whole point of this wrapper), agy can
 # hard-hang before its own --print-timeout engages (notably native Windows without
 # a ConPTY — see issue #6). Wrap in GNU `timeout`/`gtimeout` when available so we
 # always return instead of hanging forever. `timeout` exits 124 on kill -> map to
 # our TIMEOUT (12) and emit the structured signal, so orchestrators react cleanly.
-TO_SECS="$(outer_timeout_secs "$TIMEOUT")"
 
 if on_windows_native && [ -z "$TO_CMD" ]; then
   # Native Windows + no timeout binary = highest hang risk with no safety net.
@@ -453,17 +479,15 @@ if on_windows_native && [ -z "$TO_CMD" ]; then
   echo "agy-delegate:   call never returns, run from WSL/macOS/Linux, or install coreutils \`timeout\`." >&2
 fi
 
-set +e
+printf '%s\n' running > "$RUN_DIR/state"
 if [ -n "$TO_CMD" ]; then
   # --kill-after sends SIGKILL if agy ignores the initial SIGTERM (defensive).
-  "$TO_CMD" --kill-after=10 "$TO_SECS" agy "${ARGS[@]}" -p "$PROMPT" < /dev/null >"$OUTF" 2>"$ERR"
-  RC=$?
+  if run_child "$OUTF" "$ERR" "$TO_CMD" --kill-after=10 "$TO_SECS" agy "${ARGS[@]}" -p "$PROMPT"; then RC=0; else RC=$?; fi
 else
-  agy "${ARGS[@]}" -p "$PROMPT" < /dev/null >"$OUTF" 2>"$ERR"
-  RC=$?
+  if run_child "$OUTF" "$ERR" agy "${ARGS[@]}" -p "$PROMPT"; then RC=0; else RC=$?; fi
 fi
 OUT="$(cat "$OUTF" 2>/dev/null)"
-set -e
+printf '%s\n' processing > "$RUN_DIR/state"
 
 # --- unwrap the structured envelope (JSON mode) --------------------------------
 # Replaces OUT with the model's text so the stdout contract is unchanged, exposes
@@ -473,20 +497,20 @@ JSON_STATUS=""; JSON_ERROR=""; JSON_DENIED=""
 # Glob, not ${OUT//[...]/}: stripping the whole string to test emptiness is minutes-to-
 # hours at tens of KB on macOS /bin/bash 3.2 (n^~2.6); the glob stops at the first hit.
 if [ "$JSON_MODE" -eq 1 ] && [[ "$OUT" = *[!$' \t\n\r']* ]]; then
-  # The response can be multi-line, so it goes to a temp file; the single-line
+  # The response can be multi-line, so it goes to a retained file; the single-line
   # metadata comes back on stdout. (Command substitution strips NUL bytes, so a
   # NUL-delimited stream is not an option here.)
-  RESP="$(mktemp "${TMPDIR:-/tmp}/agy-resp.XXXXXX")"
+  RESP="$RUN_DIR/response"
   # The error text goes to its OWN file, not back out through `meta`. agy's error
   # strings quote the offending value (`--model \"foo\"`), and pulling the field out
   # of `meta` with sed truncates at that first escaped quote — which silently hid the
   # diagnostic from the classifier, so a bad --model/tier remap reported a generic
   # "agy failed" (exit 2) instead of MODEL_UNAVAILABLE (14). Let python, which already
   # has the parsed object, write the raw value out.
-  JERR="$(mktemp "${TMPDIR:-/tmp}/agy-err.XXXXXX")"
+  JERR="$RUN_DIR/error"
   # agy 1.1.27+: `denied_actions` is a list of {action, display_name}; the tool names
   # come out as one space-separated line, same file discipline as the error text.
-  JDEN="$(mktemp "${TMPDIR:-/tmp}/agy-den.XXXXXX")"
+  JDEN="$RUN_DIR/denied_actions"
   meta="$(AGY_JSON="$OUT" AGY_RESP_FILE="$RESP" AGY_ERR_FILE="$JERR" AGY_DEN_FILE="$JDEN" \
         AGY_MODEL="$MODEL" AGY_TIER="$USAGE_TIER" python3 - <<'PY' 2>/dev/null || true
 import json, os, sys
@@ -541,17 +565,16 @@ PY
     # A structured ERROR is authoritative even if agy exited 0.
     [ "$JSON_STATUS" = "ERROR" ] && [ "$RC" -eq 0 ] && RC=1
   fi
-  rm -f "$RESP" "$JERR" "$JDEN"
 fi
 
 # `timeout` exits 124 (SIGTERM) or 137 (SIGKILL after --kill-after) when it had to
 # kill agy. Treat that as our structured TIMEOUT (exit 12), not a generic failure.
 if [ -n "$TO_CMD" ] && { [ $RC -eq 124 ] || [ $RC -eq 137 ]; }; then
-  echo "agy-delegate: agy hit the wall-clock guard (${TO_SECS}s) and was terminated — likely a headless/no-TTY hang." >&2
+  echo "agy-delegate: agy hit the wall-clock guard (${TO_SECS}s) and was terminated. Inspect the retained logs and workspace changes before retrying." >&2
   if on_windows_native; then
     echo "agy-delegate:   native Windows: agy needs a console (ConPTY); run delegation from WSL/macOS/Linux." >&2
   fi
-  signal TIMEOUT "agy wall-clock guard fired after ${TO_SECS}s (headless/no-TTY hang?)"
+  signal TIMEOUT "agy wall-clock guard fired after ${TO_SECS}s; inspect edits and run diagnostics before retrying"
   exit 12
 fi
 
@@ -583,7 +606,7 @@ if [ "$RC" -eq 0 ] && grep -qE 'print timeout after .*returning partial output' 
   # The AGY_USAGE line exists only in JSON mode; do not point plain-text callers at a line
   # that was never printed (review caught the unconditional wording).
   usage_note=""; [ "$JSON_MODE" -eq 1 ] && usage_note=", so the AGY_USAGE line above undercounts"
-  echo "agy-delegate: agy's --print-timeout ($TIMEOUT) expired mid-turn — the output above is PARTIAL (agy 1.1.28+ returns it with rc 0 and reports no usage for the turn${usage_note}). Raise --timeout or narrow the task; --continue resumes the same conversation." >&2
+  echo "agy-delegate: agy's --print-timeout ($TIMEOUT) expired mid-turn — the output above is PARTIAL (agy 1.1.28+ returns it with rc 0 and reports no usage for the turn${usage_note}). Inspect existing edits and verify them before retrying; if work remains, correct the harness budget and resume the recorded --conversation ID." >&2
   signal TIMEOUT "agy print-timeout ($TIMEOUT) expired mid-turn — partial output printed to stdout"
   exit 12
 fi
